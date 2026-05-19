@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PUBGM JP 상품별 KPI</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#12141f;color:#d0d0e0;font-family:'Segoe UI',sans-serif;font-size:13px}
+.header{background:#1a1d2e;border-bottom:1px solid #2e3347;padding:12px 20px;display:flex;align-items:center;gap:12px}
+.header h1{font-size:16px;font-weight:700;color:#e8e8f0}
+.badge{background:#2e3347;border-radius:4px;padding:2px 8px;font-size:11px;color:#8b8fa8}
+.badge.active{background:#1a3a1a;color:#4caf50}
+.controls{background:#161829;border-bottom:1px solid #2e3347;padding:10px 20px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.btn-group{display:flex;gap:2px;background:#0e1018;border-radius:6px;padding:2px}
+.btn-group button{background:none;border:none;color:#8b8fa8;padding:5px 14px;cursor:pointer;font-size:12px;border-radius:4px;transition:all .15s}
+.btn-group button.active{background:#2a3060;color:#6c8fff;font-weight:600}
+.sep{width:1px;height:28px;background:#2e3347;margin:0 4px}
+.search-wrap{margin-left:auto}
+.search-wrap input{background:#1a1d2e;border:1px solid #2e3347;border-radius:5px;padding:5px 10px;color:#d0d0e0;font-size:12px;width:180px}
+.search-wrap input::placeholder{color:#555}
+.table-wrap{overflow-x:auto;padding:16px 20px}
+table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}
+th{background:#1a1d2e;color:#8b8fa8;font-weight:600;padding:7px 10px;text-align:right;border-bottom:2px solid #2e3347;position:sticky;top:0;z-index:2}
+th.left{text-align:left}
+th.group-header{text-align:center;background:#14172a;color:#6c8fff;font-size:11px;border-bottom:1px solid #2e3347}
+td{padding:6px 10px;text-align:right;border-bottom:1px solid #1e2133;color:#b0b8d0}
+td.left{text-align:left;color:#d0d8f0}
+td.name{max-width:200px;overflow:hidden;text-overflow:ellipsis}
+td.id-sub{font-size:10px;color:#556;margin-top:1px}
+tr:hover td{background:#1a1d2e}
+tr.active-row td{background:#0d1a12}
+tr.active-row:hover td{background:#122018}
+.vtuber-badge{display:inline-block;background:#3a1a4a;color:#c678dd;border-radius:3px;padding:1px 5px;font-size:10px;margin-left:4px}
+.lv-bar{display:inline-block;height:6px;background:#2a3060;border-radius:3px;vertical-align:middle;margin-right:2px}
+.no-data{text-align:center;color:#555;padding:40px;font-size:13px}
+.loading{text-align:center;color:#6c8fff;padding:40px}
+
+/* 과금 레벨 색상 */
+.lv-Non-Paid{color:#556}
+.lv-Lv_1{color:#7bafd4}
+.lv-Lv_2{color:#5fa05f}
+.lv-Lv_3{color:#c9a84c}
+.lv-Lv_4{color:#d4763a}
+.lv-Lv_5{color:#c85050}
+.lv-Lv_6{color:#b044b0}
+.lv-Lv_7{color:#e040fb}
+
+.col-group-total{border-left:2px solid #2e3347}
+.col-group-lv{border-left:1px solid #252840}
+.col-group-npu{border-left:2px solid #3a2a50}
+.col-group-ret{border-left:2px solid #1a3030}
+
+.footer{padding:10px 20px;color:#555;font-size:11px;border-top:1px solid #1e2133}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>PUBGM JP 상품별 KPI</h1>
+  <span class="badge" id="genDate">%%GEN_DATE%%</span>
+  <span class="badge">데이터 기준: %%CUTOFF%%</span>
+  <span class="badge active" id="activeCnt"></span>
+</div>
+
+<div class="controls">
+  <!-- 상품 유형 -->
+  <div class="btn-group" id="typeGroup">
+    <button class="active" onclick="setType('spin',this)">Spin</button>
+    <button onclick="setType('box',this)">상자</button>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- VTuber 필터 -->
+  <div class="btn-group" id="vtGroup">
+    <button class="active" onclick="setVt('all',this)">전체</button>
+    <button onclick="setVt('vtuber',this)">VTuber</button>
+    <button onclick="setVt('normal',this)">일반</button>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- 과금 레벨 기준 -->
+  <span style="color:#8b8fa8;font-size:11px">과금 레벨 기준:</span>
+  <div class="btn-group" id="methodGroup">
+    <button class="active" onclick="setMethod('period',this)" title="판매 기간 중 충전 / 기간일수 × 30">판매기간</button>
+    <button onclick="setMethod('3m',this)" title="출시 전 3개월 평균 충전">직전 3개월</button>
+    <button onclick="setMethod('1m',this)" title="출시 전 1개월 충전">직전 1개월</button>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- 판매 중 필터 -->
+  <div class="btn-group" id="statusGroup">
+    <button class="active" onclick="setStatus('all',this)">전체</button>
+    <button onclick="setStatus('active',this)">판매 중</button>
+    <button onclick="setStatus('done',this)">완료</button>
+  </div>
+
+  <div class="search-wrap">
+    <input type="text" id="searchInput" placeholder="상품명 검색..." oninput="render()">
+  </div>
+</div>
+
+<div class="table-wrap">
+  <table id="mainTable">
+    <thead id="thead"></thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<div class="footer" id="footer"></div>
+
+<script>
+const SPIN_DATA = %%SPIN_DATA%%;
+const BOX_DATA  = %%BOX_DATA%%;
+
+const LEVELS = ['Non-Paid','Lv_1','Lv_2','Lv_3','Lv_4','Lv_5','Lv_6','Lv_7'];
+
+let curType   = 'spin';
+let curVt     = 'all';
+let curMethod = 'period';
+let curStatus = 'all';
+
+function setType(v,btn){
+  curType=v;
+  document.querySelectorAll('#typeGroup button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+function setVt(v,btn){
+  curVt=v;
+  document.querySelectorAll('#vtGroup button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+function setMethod(v,btn){
+  curMethod=v;
+  document.querySelectorAll('#methodGroup button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+function setStatus(v,btn){
+  curStatus=v;
+  document.querySelectorAll('#statusGroup button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+function fmt(n){
+  if(n==null||n===undefined) return '-';
+  if(n===0) return '0';
+  return Number(n).toLocaleString();
+}
+function arppu(uc,u){
+  if(!u||!uc) return '-';
+  return Math.round(uc/u).toLocaleString();
+}
+
+function getLvData(item, lv){
+  // item.level = {period:{pay_level:{u,uc}}, '3m':{...}, '1m':{...}}
+  const m = item.level && item.level[curMethod];
+  if(!m) return {u:0, uc:0};
+  return m[lv] || {u:0, uc:0};
+}
+
+function buildHeader(){
+  const thead = document.getElementById('thead');
+  thead.innerHTML = `
+    <tr>
+      <th class="left" rowspan="2" style="min-width:40px">출시일</th>
+      <th class="left" rowspan="2" style="min-width:180px">상품명</th>
+      <th rowspan="2">기간</th>
+      <th class="group-header col-group-total" colspan="3">Total</th>
+      <th class="group-header col-group-total" colspan="1">NPU</th>
+      ${LEVELS.map(lv=>`<th class="group-header col-group-lv" colspan="3" style="color:var(--lv-col,#6c8fff)">${lv}</th>`).join('')}
+      <th class="group-header col-group-npu" colspan="3">신규 (NPU)</th>
+      <th class="group-header col-group-ret" colspan="3">리턴</th>
+    </tr>
+    <tr>
+      <th class="col-group-total">유저</th>
+      <th class="col-group-total">UC</th>
+      <th class="col-group-total">ARPPU</th>
+      <th class="col-group-total">유저수</th>
+      ${LEVELS.map(()=>'<th class="col-group-lv">유저</th><th class="col-group-lv">UC</th><th class="col-group-lv">ARPPU</th>').join('')}
+      <th class="col-group-npu">유저</th><th class="col-group-npu">UC</th><th class="col-group-npu">ARPPU</th>
+      <th class="col-group-ret">유저</th><th class="col-group-ret">UC</th><th class="col-group-ret">ARPPU</th>
+    </tr>`;
+}
+
+function render(){
+  const data = curType === 'spin' ? SPIN_DATA : BOX_DATA;
+  const search = document.getElementById('searchInput').value.trim().toLowerCase();
+
+  const filtered = data.filter(d => {
+    if(curVt === 'vtuber' && !d.vtuber) return false;
+    if(curVt === 'normal' && d.vtuber) return false;
+    if(curStatus === 'active' && !d.active) return false;
+    if(curStatus === 'done' && d.active) return false;
+    if(search){
+      const id   = (curType==='spin' ? d.id : d.id) || '';
+      const name = d.name || '';
+      if(!id.toLowerCase().includes(search) && !name.toLowerCase().includes(search)) return false;
+    }
+    return true;
+  });
+
+  const activeCnt = data.filter(d=>d.active).length;
+  document.getElementById('activeCnt').textContent = `판매 중 ${activeCnt}개`;
+
+  const tbody = document.getElementById('tbody');
+  if(!filtered.length){
+    tbody.innerHTML = '<tr><td colspan="100" class="no-data">데이터 없음</td></tr>';
+    document.getElementById('footer').textContent = '0개';
+    return;
+  }
+
+  const hasLevel = filtered.some(d => d.level && d.level[curMethod]);
+  if(!hasLevel){
+    tbody.innerHTML = '<tr><td colspan="100" class="no-data">이 기준의 과금 레벨 데이터가 없습니다</td></tr>';
+    return;
+  }
+
+  const rows = filtered.map(d => {
+    const isSpin = curType === 'spin';
+    const nameCell = isSpin
+      ? `<td class="left name">${d.vtuber?'<span class="vtuber-badge">VT</span>':''} ${d.name}<div class="id-sub">${d.id}</div></td>`
+      : `<td class="left name">${d.vtuber?'<span class="vtuber-badge">VT</span>':''} ${d.id}</td>`;
+
+    const lvCells = LEVELS.map(lv => {
+      const {u, uc} = getLvData(d, lv);
+      return `<td class="col-group-lv">${fmt(u)}</td><td class="col-group-lv">${fmt(uc)}</td><td class="col-group-lv">${arppu(uc,u)}</td>`;
+    }).join('');
+
+    const rowClass = d.active ? 'active-row' : '';
+    return `<tr class="${rowClass}">
+      <td class="left">${d.launch}${d.active?'<span class="vtuber-badge" style="background:#1a3a1a;color:#4caf50">●</span>':''}</td>
+      ${nameCell}
+      <td>${fmt(d.days)}일</td>
+      <td class="col-group-total">${fmt(d.total_u)}</td>
+      <td class="col-group-total">${fmt(d.total_uc)}</td>
+      <td class="col-group-total">${arppu(d.total_uc,d.total_u)}</td>
+      <td class="col-group-total">${fmt(d.npu_u)}</td>
+      ${lvCells}
+      <td class="col-group-npu">${fmt(d.npu_u)}</td>
+      <td class="col-group-npu">${fmt(d.npu_uc)}</td>
+      <td class="col-group-npu">${arppu(d.npu_uc,d.npu_u)}</td>
+      <td class="col-group-ret">${fmt(d.ret_u)}</td>
+      <td class="col-group-ret">${fmt(d.ret_uc)}</td>
+      <td class="col-group-ret">${arppu(d.ret_uc,d.ret_u)}</td>
+    </tr>`;
+  });
+
+  tbody.innerHTML = rows.join('');
+  document.getElementById('footer').textContent =
+    `${filtered.length}개 표시 중 / 전체 ${data.length}개 | 과금 레벨 기준: ${
+      curMethod==='period'?'판매기간 30일 정규화':curMethod==='3m'?'직전 3개월 평균':'직전 1개월'}`;
+}
+
+buildHeader();
+render();
+</script>
+</body>
+</html>
