@@ -3,103 +3,148 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PUBGM JP 상품별 KPI</title>
+<title>PUBGM JP Product KPI</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#12141f;color:#d0d0e0;font-family:'Segoe UI',sans-serif;font-size:13px}
-.header{background:#1a1d2e;border-bottom:1px solid #2e3347;padding:12px 20px;display:flex;align-items:center;gap:12px}
-.header h1{font-size:16px;font-weight:700;color:#e8e8f0}
-.badge{background:#2e3347;border-radius:4px;padding:2px 8px;font-size:11px;color:#8b8fa8}
-.badge.active{background:#1a3a1a;color:#4caf50}
-.controls{background:#161829;border-bottom:1px solid #2e3347;padding:10px 20px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.btn-group{display:flex;gap:2px;background:#0e1018;border-radius:6px;padding:2px}
-.btn-group button{background:none;border:none;color:#8b8fa8;padding:5px 14px;cursor:pointer;font-size:12px;border-radius:4px;transition:all .15s}
-.btn-group button.active{background:#2a3060;color:#6c8fff;font-weight:600}
-.sep{width:1px;height:28px;background:#2e3347;margin:0 4px}
+body{background:#f0f2f8;color:#1e2235;font-family:'Segoe UI',sans-serif;font-size:13px}
+.header{background:#fff;border-bottom:1px solid #dde1f0;padding:12px 20px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.header h1{font-size:16px;font-weight:700;color:#1e2235}
+.badge{background:#eef0f8;border-radius:4px;padding:2px 8px;font-size:11px;color:#6b7280}
+.badge.active{background:#e6f4ea;color:#2d8a45}
+.controls{background:#fff;border-bottom:1px solid #dde1f0;padding:10px 20px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.btn-group{display:flex;gap:2px;background:#eef0f8;border-radius:6px;padding:2px}
+.btn-group button{background:none;border:none;color:#6b7280;padding:5px 14px;cursor:pointer;font-size:12px;border-radius:4px;transition:all .15s}
+.btn-group button.active{background:#fff;color:#3b5bdb;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.btn-group button:disabled{opacity:0.35;cursor:default}
+.sep{width:1px;height:28px;background:#dde1f0;margin:0 4px}
 .search-wrap{margin-left:auto}
-.search-wrap input{background:#1a1d2e;border:1px solid #2e3347;border-radius:5px;padding:5px 10px;color:#d0d0e0;font-size:12px;width:180px}
-.search-wrap input::placeholder{color:#555}
+.search-wrap input{background:#f4f6fc;border:1px solid #dde1f0;border-radius:5px;padding:5px 10px;color:#1e2235;font-size:12px;width:180px}
+.search-wrap input::placeholder{color:#aab0c0}
 .table-wrap{overflow-x:auto;padding:16px 20px}
 table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}
-th{background:#1a1d2e;color:#8b8fa8;font-weight:600;padding:7px 10px;text-align:right;border-bottom:2px solid #2e3347;position:sticky;top:0;z-index:2}
+th{background:#f4f6fc;color:#6b7280;font-weight:600;padding:7px 10px;text-align:right;border-bottom:2px solid #dde1f0;position:sticky;top:0;z-index:2}
 th.left{text-align:left}
-th.group-header{text-align:center;background:#14172a;color:#6c8fff;font-size:11px;border-bottom:1px solid #2e3347}
-td{padding:6px 10px;text-align:right;border-bottom:1px solid #1e2133;color:#b0b8d0}
-td.left{text-align:left;color:#d0d8f0}
+th.group-header{text-align:center;background:#eef0f8;color:#3b5bdb;font-size:11px;border-bottom:1px solid #dde1f0}
+td{padding:6px 10px;text-align:right;border-bottom:1px solid #e8ebf5;color:#374160}
+td.left{text-align:left;color:#1e2235}
 td.name{max-width:200px;overflow:hidden;text-overflow:ellipsis}
-td.id-sub{font-size:10px;color:#556;margin-top:1px}
-tr:hover td{background:#1a1d2e}
-tr.active-row td{background:#0d1a12}
-tr.active-row:hover td{background:#122018}
-.vtuber-badge{display:inline-block;background:#3a1a4a;color:#c678dd;border-radius:3px;padding:1px 5px;font-size:10px;margin-left:4px}
-.lv-bar{display:inline-block;height:6px;background:#2a3060;border-radius:3px;vertical-align:middle;margin-right:2px}
-.no-data{text-align:center;color:#555;padding:40px;font-size:13px}
-.loading{text-align:center;color:#6c8fff;padding:40px}
+.id-sub{font-size:10px;color:#9aa0b8;margin-top:2px}
+tr{cursor:pointer}
+tr:hover td{background:#f4f6fc}
+tr.active-row td{background:#f0faf3}
+tr.active-row:hover td{background:#e8f7ed}
+tr.sel-row td{background:#eef1ff!important;border-left:2px solid #3b5bdb}
+tr.sel-row:hover td{background:#e6eaff!important}
+tr.active-row.sel-row td{background:#e8f0fa!important}
+.vtuber-badge{display:inline-block;background:#f5e6ff;color:#9333ea;border-radius:3px;padding:1px 5px;font-size:10px;margin-left:4px}
+.no-data{text-align:center;color:#9aa0b8;padding:40px;font-size:13px}
 
 /* 과금 레벨 색상 */
-.lv-Non-Paid{color:#556}
-.lv-Lv_1{color:#7bafd4}
-.lv-Lv_2{color:#5fa05f}
-.lv-Lv_3{color:#c9a84c}
-.lv-Lv_4{color:#d4763a}
-.lv-Lv_5{color:#c85050}
-.lv-Lv_6{color:#b044b0}
-.lv-Lv_7{color:#e040fb}
+.lv-Non-Paid{color:#aab0c0}
+.lv-Lv_1{color:#3b82f6}
+.lv-Lv_2{color:#16a34a}
+.lv-Lv_3{color:#ca8a04}
+.lv-Lv_4{color:#ea580c}
+.lv-Lv_5{color:#dc2626}
+.lv-Lv_6{color:#9333ea}
+.lv-Lv_7{color:#db2777}
 
-.col-group-total{border-left:2px solid #2e3347}
-.col-group-lv{border-left:1px solid #252840}
-.col-group-npu{border-left:2px solid #3a2a50}
-.col-group-ret{border-left:2px solid #1a3030}
+.col-group-total{border-left:2px solid #bcc4d8}
+.col-group-lv{border-left:2px solid #bcc4d8}
+.col-group-npu{border-left:2px solid #bcc4d8}
+.col-group-ret{border-left:2px solid #bcc4d8}
+/* 그룹 내 UC/ARPPU 열 - 얇고 연한 구분선 */
+.col-sub{border-left:1px solid #dde3f0}
+thead th.col-sub{border-left:1px solid #d0d8ea}
+/* 헤더 행 구분선 - 데이터 행과 같은 색, 두께만 3px */
+thead th.col-group-total{border-left:3px solid #bcc4d8}
+thead th.col-group-lv{border-left:3px solid #bcc4d8}
+thead th.col-group-npu{border-left:3px solid #bcc4d8}
+thead th.col-group-ret{border-left:3px solid #bcc4d8}
 
-.footer{padding:10px 20px;color:#555;font-size:11px;border-top:1px solid #1e2133}
+.footer{padding:10px 20px;color:#9aa0b8;font-size:11px;border-top:1px solid #e8ebf5}
+.sel-clear{background:none;border:none;color:#9aa0b8;font-size:11px;cursor:pointer;padding:2px 6px;border-radius:3px}
+.sel-clear:hover{color:#1e2235;background:#eef0f8}
+.lang-btn{background:none;border:1px solid #dde1f0;color:#6b7280;padding:3px 9px;cursor:pointer;font-size:11px;border-radius:4px;font-weight:500}
+.lang-btn.active{background:#eef0f8;color:#3b5bdb;border-color:#c0c8e8;font-weight:700}
+.lang-btn:hover:not(.active){background:#f4f6fc}
 </style>
 </head>
 <body>
 
 <div class="header">
-  <h1>PUBGM JP 상품별 KPI</h1>
+  <h1>PUBGM JP Product KPI</h1>
   <span class="badge" id="genDate">%%GEN_DATE%%</span>
-  <span class="badge">데이터 기준: %%CUTOFF%%</span>
+  <span class="badge"><span data-i18n="data_as_of">데이터 기준:</span> %%CUTOFF%%</span>
   <span class="badge active" id="activeCnt"></span>
+  <div style="margin-left:auto;display:flex;gap:4px">
+    <button class="lang-btn active" data-lang="ko" onclick="setLang('ko')">KO</button>
+    <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
+    <button class="lang-btn" data-lang="ja" onclick="setLang('ja')">JA</button>
+  </div>
 </div>
 
 <div class="controls">
   <!-- 상품 유형 -->
   <div class="btn-group" id="typeGroup">
-    <button class="active" onclick="setType('spin',this)">Spin</button>
-    <button onclick="setType('box',this)">상자</button>
+    <button class="active" onclick="setType('all',this)" data-i18n="all">전체</button>
+    <button onclick="setType('spin',this)">Spin</button>
+    <button onclick="setType('box',this)">Crate</button>
   </div>
 
   <div class="sep"></div>
 
   <!-- VTuber 필터 -->
   <div class="btn-group" id="vtGroup">
-    <button class="active" onclick="setVt('all',this)">전체</button>
+    <button class="active" onclick="setVt('all',this)" data-i18n="all">전체</button>
     <button onclick="setVt('vtuber',this)">VTuber</button>
-    <button onclick="setVt('normal',this)">일반</button>
+    <button onclick="setVt('normal',this)" data-i18n="normal">일반</button>
   </div>
 
   <div class="sep"></div>
 
   <!-- 과금 레벨 기준 -->
-  <span style="color:#8b8fa8;font-size:11px">과금 레벨 기준:</span>
+  <span style="color:#8b8fa8;font-size:11px" data-i18n="pay_level_label">과금 레벨 기준:</span>
   <div class="btn-group" id="methodGroup">
-    <button class="active" onclick="setMethod('period',this)" title="판매 기간 중 충전 / 기간일수 × 30">판매기간</button>
-    <button onclick="setMethod('3m',this)" title="출시 전 3개월 평균 충전">직전 3개월</button>
-    <button onclick="setMethod('1m',this)" title="출시 전 1개월 충전">직전 1개월</button>
+    <button class="active" onclick="setMethod('period',this)" data-i18n="method_period" data-i18n-title="method_period_title" title="판매 기간 중 충전 / 기간일수 × 30">판매기간</button>
+    <button onclick="setMethod('3m',this)" data-i18n="method_3m" data-i18n-title="method_3m_title" title="출시 전 3개월 평균 충전">직전 3개월</button>
+    <button onclick="setMethod('1m',this)" data-i18n="method_1m" data-i18n-title="method_1m_title" title="출시 전 1개월 충전">직전 1개월</button>
   </div>
+
+  <div class="sep"></div>
+
+  <!-- D+n 기준 -->
+  <div class="btn-group">
+    <button class="active" id="btnDpTotal" onclick="toggleDpTotal(this)">Total</button>
+  </div>
+  <span style="color:#8b8fa8;font-size:11px;margin-left:4px">D+</span>
+  <input type="range" id="dpSlider" min="0" max="60" value="30" disabled
+    onmousedown="activateSlider()"
+    ontouchstart="activateSlider()"
+    oninput="setDpSlider(this.value)"
+    style="width:90px;vertical-align:middle;accent-color:#6c8fff;cursor:pointer;opacity:0.3">
+  <span id="dpVal" style="color:#6c8fff;font-size:12px;min-width:18px;font-weight:600;opacity:0.3">30</span>
 
   <div class="sep"></div>
 
   <!-- 판매 중 필터 -->
   <div class="btn-group" id="statusGroup">
-    <button class="active" onclick="setStatus('all',this)">전체</button>
-    <button onclick="setStatus('active',this)">판매 중</button>
-    <button onclick="setStatus('done',this)">완료</button>
+    <button class="active" onclick="setStatus('all',this)" data-i18n="all">전체</button>
+    <button onclick="setStatus('active',this)" data-i18n="status_active">판매 중</button>
+    <button onclick="setStatus('done',this)" data-i18n="status_done">완료</button>
   </div>
 
+  <div class="sep"></div>
+
+  <!-- 상품 선택 필터 -->
+  <div class="btn-group">
+    <button id="btnSel" onclick="toggleSelView(this)" disabled style="min-width:70px" data-i18n-sel="0"></button>
+  </div>
+  <button class="sel-clear" id="btnSelClear" onclick="clearSel()" style="display:none" data-i18n="sel_clear">× 해제</button>
+  <button class="sel-clear" id="btnExport" onclick="exportCSV()" style="color:#3b5bdb">↓ Export</button>
+
   <div class="search-wrap">
-    <input type="text" id="searchInput" placeholder="상품명 검색..." oninput="render()">
+    <input type="text" id="searchInput" data-i18n-ph="search_ph" placeholder="상품명 검색..." oninput="render()">
   </div>
 </div>
 
@@ -118,10 +163,123 @@ const BOX_DATA  = %%BOX_DATA%%;
 
 const LEVELS = ['Non-Paid','Lv_1','Lv_2','Lv_3','Lv_4','Lv_5','Lv_6','Lv_7'];
 
-let curType   = 'spin';
-let curVt     = 'all';
-let curMethod = 'period';
-let curStatus = 'all';
+// ── i18n ──────────────────────────────────────────────────────────────────
+let curLang = 'ko';
+const I18N = {
+  ko: {
+    data_as_of:          '데이터 기준:',
+    active_count:        n=>`판매 중 ${n}개`,
+    all:                 '전체',
+    normal:              '일반',
+    pay_level_label:     '과금 레벨 기준:',
+    method_period:       '판매기간',
+    method_3m:           '직전 3개월',
+    method_1m:           '직전 1개월',
+    method_period_title: '판매 기간 중 충전 / 기간일수 × 30',
+    method_3m_title:     '출시 전 3개월 평균 충전',
+    method_1m_title:     '출시 전 1개월 충전',
+    method_period_long:  '판매기간 30일 정규화',
+    method_3m_long:      '직전 3개월 평균',
+    method_1m_long:      '직전 1개월',
+    status_active:       '판매 중',
+    status_done:         '완료',
+    search_ph:           '상품명 검색...',
+    no_data:             '데이터 없음',
+    no_level_data:       '이 기준의 과금 레벨 데이터가 없습니다',
+    shown_of:            (s,tt)=>`${s}개 표시 중 / 전체 ${tt}개`,
+    sel_n:               n=>`선택 ${n}개`,
+    sel_clear:           '× 해제',
+  },
+  en: {
+    data_as_of:          'Data as of:',
+    active_count:        n=>`${n} Active`,
+    all:                 'All',
+    normal:              'Normal',
+    pay_level_label:     'Pay Level:',
+    method_period:       'Sale Period',
+    method_3m:           'Prev 3M',
+    method_1m:           'Prev 1M',
+    method_period_title: 'Charge during sale / days × 30',
+    method_3m_title:     '3M avg charge before launch',
+    method_1m_title:     '1M charge before launch',
+    method_period_long:  'Sale Period (30d norm)',
+    method_3m_long:      'Prev 3M Avg',
+    method_1m_long:      'Prev 1M',
+    status_active:       'Active',
+    status_done:         'Ended',
+    search_ph:           'Search product...',
+    no_data:             'No data',
+    no_level_data:       'No pay level data for this criteria',
+    shown_of:            (s,tt)=>`${s} / ${tt} items`,
+    sel_n:               n=>`${n} selected`,
+    sel_clear:           '× Clear',
+  },
+  ja: {
+    data_as_of:          'データ基準:',
+    active_count:        n=>`販売中 ${n}件`,
+    all:                 '全て',
+    normal:              '通常',
+    pay_level_label:     '課金レベル:',
+    method_period:       '販売期間',
+    method_3m:           '直前3ヶ月',
+    method_1m:           '直前1ヶ月',
+    method_period_title: '販売期間中チャージ / 日数 × 30',
+    method_3m_title:     'リリース前3ヶ月平均チャージ',
+    method_1m_title:     'リリース前1ヶ月チャージ',
+    method_period_long:  '販売期間(30日換算)',
+    method_3m_long:      '直前3ヶ月平均',
+    method_1m_long:      '直前1ヶ月',
+    status_active:       '販売中',
+    status_done:         '終了',
+    search_ph:           '商品名検索...',
+    no_data:             'データなし',
+    no_level_data:       'この基準の課金レベルデータがありません',
+    shown_of:            (s,tt)=>`${s}件表示 / 全${tt}件`,
+    sel_n:               n=>`${n}件選択`,
+    sel_clear:           '× 解除',
+  }
+};
+function t(key, ...args){
+  const v = I18N[curLang][key];
+  return typeof v === 'function' ? v(...args) : (v ?? key);
+}
+function setLang(lang){
+  curLang = lang;
+  document.querySelectorAll('.lang-btn').forEach(b=>b.classList.toggle('active', b.dataset.lang===lang));
+  applyLang();
+  render();
+}
+function applyLang(){
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
+}
+
+const LV_HEAT = {
+  'Non-Paid': [160, 140, 110],
+  'Lv_1':     [ 59, 130, 246],
+  'Lv_2':     [ 16, 163,  74],
+  'Lv_3':     [234,  88,  12],
+  'Lv_4':     [220,  38,  38],
+  'Lv_5':     [180,  20,  20],
+  'Lv_6':     [147,  51, 234],
+  'Lv_7':     [219,  39, 119],
+};
+function heatBg(lv, val, maxVal){
+  if(!val || !maxVal) return '';
+  const [r,g,b] = LV_HEAT[lv] || [150,150,150];
+  const t = Math.sqrt(val/maxVal) * 0.55;
+  return `background:rgb(${Math.round(255+(r-255)*t)},${Math.round(255+(g-255)*t)},${Math.round(255+(b-255)*t)})`;
+}
+function pct(a,b){ return b ? (a/b*100).toFixed(1)+'%' : '-'; }
+
+let curType    = 'all';
+let curVt      = 'all';
+let curMethod  = 'period';
+let curDp      = 'total';
+let curStatus  = 'all';
+let showSelOnly = false;
+const selectedKeys = new Set();
 
 function setType(v,btn){
   curType=v;
@@ -141,6 +299,39 @@ function setMethod(v,btn){
   btn.classList.add('active');
   render();
 }
+
+function toggleDpTotal(btn){
+  if(btn.classList.contains('active')){
+    // 해제 → 슬라이더 활성화
+    btn.classList.remove('active');
+    activateSlider();
+  } else {
+    // 선택 → 슬라이더 비활성화
+    curDp = 'total';
+    btn.classList.add('active');
+    const sl = document.getElementById('dpSlider');
+    sl.disabled = true;
+    sl.style.opacity = '0.3';
+    document.getElementById('dpVal').style.opacity = '0.3';
+    render();
+  }
+}
+function activateSlider(){
+  const sl = document.getElementById('dpSlider');
+  sl.disabled = false;
+  sl.style.opacity = '1';
+  document.getElementById('dpVal').style.opacity = '1';
+  document.getElementById('btnDpTotal').classList.remove('active');
+  curDp = String(sl.value);
+  document.getElementById('dpVal').textContent = sl.value;
+  render();
+}
+function setDpSlider(val){
+  curDp = String(val);
+  document.getElementById('dpVal').textContent = val;
+  render();
+}
+
 function setStatus(v,btn){
   curStatus=v;
   document.querySelectorAll('#statusGroup button').forEach(b=>b.classList.remove('active'));
@@ -148,116 +339,260 @@ function setStatus(v,btn){
   render();
 }
 
+function toggleSel(key){
+  if(selectedKeys.has(key)) selectedKeys.delete(key);
+  else selectedKeys.add(key);
+  updateSelBtn();
+  render();
+}
+function toggleSelView(btn){
+  if(selectedKeys.size === 0) return;
+  showSelOnly = !showSelOnly;
+  btn.classList.toggle('active', showSelOnly);
+  render();
+}
+function clearSel(){
+  selectedKeys.clear();
+  showSelOnly = false;
+  updateSelBtn();
+  render();
+}
+function updateSelBtn(){
+  const btn = document.getElementById('btnSel');
+  const clr = document.getElementById('btnSelClear');
+  const n = selectedKeys.size;
+  btn.textContent = t('sel_n', n);
+  btn.disabled = n === 0;
+  if(n === 0){ btn.classList.remove('active'); showSelOnly = false; }
+  clr.style.display = n > 0 ? '' : 'none';
+}
+
+function exportCSV(){
+  let items;
+  if(selectedKeys.size > 0){
+    const {filtered} = getFiltered();
+    items = filtered.filter(d => selectedKeys.has(`${d._type}:${d.id}`));
+  } else {
+    const {filtered} = getFiltered();
+    items = filtered;
+  }
+  if(!items.length) return;
+
+  const headers = [
+    'Launch','Type','Product','ID','Duration(d)','Active','VTuber',
+    'Total_PU','Total_UC','Total_ARPPU','NPU_PU',
+    ...LEVELS.flatMap(lv=>[`${lv}_PU`,`${lv}_PU%`,`${lv}_UC`,`${lv}_UC%`,`${lv}_ARPPU`]),
+    'NPU_PU','NPU_UC','NPU_ARPPU',
+    'Return_PU','Return_UC','Return_ARPPU'
+  ];
+
+  const csvRows = items.map(d => {
+    const isSpin = d._type === 'spin';
+    let dispU, dispUC;
+    if(curDp === 'total'){
+      dispU = d.total_u; dispUC = d.total_uc;
+    } else {
+      const agg = LEVELS.reduce((a,lv)=>{const r=getLvData(d,lv);return{u:a.u+r.u,uc:a.uc+r.uc};},{u:0,uc:0});
+      dispU = agg.u; dispUC = agg.uc;
+    }
+    const lvVals = LEVELS.flatMap(lv => {
+      const {u, uc} = getLvData(d, lv);
+      const puPct = dispU ? (u/dispU*100).toFixed(1) : 0;
+      const ucPct = dispUC ? (uc/dispUC*100).toFixed(1) : 0;
+      return [u, puPct, uc, ucPct, u ? (uc/u*UC_TO_USD).toFixed(2) : 0];
+    });
+    return [
+      d.launch, isSpin?'Spin':'Crate', d.name||d.id, d.id, d.days,
+      d.active?'Y':'N', d.vtuber?'Y':'N',
+      dispU, dispUC, dispU ? (dispUC/dispU*UC_TO_USD).toFixed(2) : 0, d.npu_u,
+      ...lvVals,
+      d.npu_u, d.npu_uc, d.npu_u ? (d.npu_uc/d.npu_u*UC_TO_USD).toFixed(2) : 0,
+      d.ret_u, d.ret_uc, d.ret_u ? (d.ret_uc/d.ret_u*UC_TO_USD).toFixed(2) : 0
+    ];
+  });
+
+  const csv = '﻿' + [headers, ...csvRows]
+    .map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
+  const dpLabel = curDp==='total'?'Total':`D+${curDp}`;
+  a.download = `pubgm_jp_product_${curMethod}_${dpLabel}.csv`;
+  a.click();
+}
+
 function fmt(n){
   if(n==null||n===undefined) return '-';
   if(n===0) return '0';
   return Number(n).toLocaleString();
 }
+const UC_TO_USD = 0.99 / 60;
 function arppu(uc,u){
   if(!u||!uc) return '-';
-  return Math.round(uc/u).toLocaleString();
+  return '$' + (uc/u * UC_TO_USD).toFixed(2);
 }
 
 function getLvData(item, lv){
-  // item.level = {period:{pay_level:{u,uc}}, '3m':{...}, '1m':{...}}
   const m = item.level && item.level[curMethod];
   if(!m) return {u:0, uc:0};
-  return m[lv] || {u:0, uc:0};
+  const dp = m[curDp];
+  if(!dp) return {u:0, uc:0};
+  const v = dp[lv];
+  if(!v) return {u:0, uc:0};
+  return {u:v[0], uc:v[1]};
 }
 
 function buildHeader(){
   const thead = document.getElementById('thead');
   thead.innerHTML = `
     <tr>
-      <th class="left" rowspan="2" style="min-width:40px">출시일</th>
-      <th class="left" rowspan="2" style="min-width:180px">상품명</th>
-      <th rowspan="2">기간</th>
+      <th class="left" rowspan="2" style="min-width:40px">Launch</th>
+      <th class="left" rowspan="2" style="min-width:50px">Type</th>
+      <th class="left" rowspan="2" style="min-width:180px">Product</th>
+      <th rowspan="2">Duration</th>
       <th class="group-header col-group-total" colspan="3">Total</th>
       <th class="group-header col-group-total" colspan="1">NPU</th>
-      ${LEVELS.map(lv=>`<th class="group-header col-group-lv" colspan="3" style="color:var(--lv-col,#6c8fff)">${lv}</th>`).join('')}
-      <th class="group-header col-group-npu" colspan="3">신규 (NPU)</th>
-      <th class="group-header col-group-ret" colspan="3">리턴</th>
+      ${LEVELS.map(lv=>`<th class="group-header col-group-lv" colspan="5">${lv}</th>`).join('')}
+      <th class="group-header col-group-npu" colspan="3">NPU</th>
+      <th class="group-header col-group-ret" colspan="3">Return</th>
     </tr>
     <tr>
-      <th class="col-group-total">유저</th>
-      <th class="col-group-total">UC</th>
-      <th class="col-group-total">ARPPU</th>
-      <th class="col-group-total">유저수</th>
-      ${LEVELS.map(()=>'<th class="col-group-lv">유저</th><th class="col-group-lv">UC</th><th class="col-group-lv">ARPPU</th>').join('')}
-      <th class="col-group-npu">유저</th><th class="col-group-npu">UC</th><th class="col-group-npu">ARPPU</th>
-      <th class="col-group-ret">유저</th><th class="col-group-ret">UC</th><th class="col-group-ret">ARPPU</th>
+      <th class="col-group-total">PU</th>
+      <th class="col-sub">UC</th>
+      <th class="col-sub">ARPPU</th>
+      <th class="col-group-total">PU</th>
+      ${LEVELS.map(()=>'<th class="col-group-lv">PU</th><th class="col-sub">PU%</th><th class="col-sub">UC</th><th class="col-sub">UC%</th><th class="col-sub">ARPPU</th>').join('')}
+      <th class="col-group-npu">PU</th><th class="col-sub">UC</th><th class="col-sub">ARPPU</th>
+      <th class="col-group-ret">PU</th><th class="col-sub">UC</th><th class="col-sub">ARPPU</th>
     </tr>`;
 }
 
-function render(){
-  const data = curType === 'spin' ? SPIN_DATA : BOX_DATA;
+function getFiltered(){
+  const allData = [
+    ...SPIN_DATA.map(d => ({...d, _type:'spin'})),
+    ...BOX_DATA.map(d =>  ({...d, _type:'box'}))
+  ].sort((a,b) => b.launch.localeCompare(a.launch));
+
+  let data = curType === 'all' ? allData
+           : curType === 'spin' ? allData.filter(d=>d._type==='spin')
+           : allData.filter(d=>d._type==='box');
+
   const search = document.getElementById('searchInput').value.trim().toLowerCase();
 
-  const filtered = data.filter(d => {
+  let filtered = data.filter(d => {
     if(curVt === 'vtuber' && !d.vtuber) return false;
     if(curVt === 'normal' && d.vtuber) return false;
     if(curStatus === 'active' && !d.active) return false;
     if(curStatus === 'done' && d.active) return false;
     if(search){
-      const id   = (curType==='spin' ? d.id : d.id) || '';
+      const id = d.id || '';
       const name = d.name || '';
       if(!id.toLowerCase().includes(search) && !name.toLowerCase().includes(search)) return false;
     }
     return true;
   });
 
-  const activeCnt = data.filter(d=>d.active).length;
-  document.getElementById('activeCnt').textContent = `판매 중 ${activeCnt}개`;
+  if(curDp !== 'total'){
+    const dpNum = parseInt(curDp);
+    filtered = filtered.filter(d => d.days >= dpNum);
+  }
+
+  if(showSelOnly && selectedKeys.size > 0){
+    filtered = filtered.filter(d => selectedKeys.has(`${d._type}:${d.id}`));
+  }
+
+  return {filtered, allData};
+}
+
+function render(){
+  const {filtered, allData} = getFiltered();
+
+  const activeCnt = allData.filter(d=>d.active).length;
+  document.getElementById('activeCnt').textContent = t('active_count', activeCnt);
 
   const tbody = document.getElementById('tbody');
   if(!filtered.length){
-    tbody.innerHTML = '<tr><td colspan="100" class="no-data">데이터 없음</td></tr>';
-    document.getElementById('footer').textContent = '0개';
+    tbody.innerHTML = `<tr><td colspan="100" class="no-data">${t('no_data')}</td></tr>`;
+    document.getElementById('footer').textContent = t('shown_of', 0, data.length);
     return;
   }
 
-  const hasLevel = filtered.some(d => d.level && d.level[curMethod]);
+  const hasLevel = filtered.some(d => d.level && d.level[curMethod] && d.level[curMethod][curDp]);
   if(!hasLevel){
-    tbody.innerHTML = '<tr><td colspan="100" class="no-data">이 기준의 과금 레벨 데이터가 없습니다</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="100" class="no-data">${t('no_level_data')}</td></tr>`;
     return;
   }
 
-  const rows = filtered.map(d => {
-    const isSpin = curType === 'spin';
+  // Pass 1: collect row data
+  const rowInfos = filtered.map(d => {
+    const key = `${d._type}:${d.id}`;
+    let dispU, dispUC;
+    if(curDp === 'total'){
+      dispU  = d.total_u;
+      dispUC = d.total_uc;
+    } else {
+      const agg = LEVELS.reduce((a,lv)=>{const r=getLvData(d,lv);return{u:a.u+r.u,uc:a.uc+r.uc};},{u:0,uc:0});
+      dispU  = agg.u;
+      dispUC = agg.uc;
+    }
+    const lvDataMap = {};
+    LEVELS.forEach(lv => { lvDataMap[lv] = getLvData(d, lv); });
+    return {d, key, isSel: selectedKeys.has(key), isSpin: d._type==='spin', dispU, dispUC, lvDataMap};
+  });
+
+  // Pass 2: compute column maxes per level
+  const colMax = {};
+  LEVELS.forEach(lv => { colMax[lv] = {pu:0, uc:0}; });
+  rowInfos.forEach(({lvDataMap}) => {
+    LEVELS.forEach(lv => {
+      const {u, uc} = lvDataMap[lv];
+      if(u  > colMax[lv].pu) colMax[lv].pu = u;
+      if(uc > colMax[lv].uc) colMax[lv].uc = uc;
+    });
+  });
+
+  // Pass 3: render
+  const rows = rowInfos.map(({d, key, isSel, isSpin, dispU, dispUC, lvDataMap}) => {
+    const typeCell = `<td class="left"><span style="background:${isSpin?'#dbeafe':'#f3e8ff'};color:${isSpin?'#1d4ed8':'#7e22ce'};border-radius:3px;padding:2px 7px;font-size:11px;font-weight:500">${isSpin?'Spin':'Crate'}</span></td>`;
     const nameCell = isSpin
-      ? `<td class="left name">${d.vtuber?'<span class="vtuber-badge">VT</span>':''} ${d.name}<div class="id-sub">${d.id}</div></td>`
-      : `<td class="left name">${d.vtuber?'<span class="vtuber-badge">VT</span>':''} ${d.id}</td>`;
+      ? `<td class="left name">${d.vtuber?'<span class="vtuber-badge">VT</span> ':''}${d.name}<div class="id-sub">${d.id}</div></td>`
+      : `<td class="left name">${d.vtuber?'<span class="vtuber-badge">VT</span> ':''}${d.name||d.id}</td>`;
 
     const lvCells = LEVELS.map(lv => {
-      const {u, uc} = getLvData(d, lv);
-      return `<td class="col-group-lv">${fmt(u)}</td><td class="col-group-lv">${fmt(uc)}</td><td class="col-group-lv">${arppu(uc,u)}</td>`;
+      const {u, uc} = lvDataMap[lv];
+      const puSt = heatBg(lv, u, colMax[lv].pu);
+      const ucSt = heatBg(lv, uc, colMax[lv].uc);
+      return `<td class="col-group-lv" style="${puSt}">${fmt(u)}</td><td class="col-sub" style="${puSt}">${pct(u,dispU)}</td><td class="col-sub" style="${ucSt}">${fmt(uc)}</td><td class="col-sub" style="${ucSt}">${pct(uc,dispUC)}</td><td class="col-sub">${arppu(uc,u)}</td>`;
     }).join('');
 
-    const rowClass = d.active ? 'active-row' : '';
-    return `<tr class="${rowClass}">
-      <td class="left">${d.launch}${d.active?'<span class="vtuber-badge" style="background:#1a3a1a;color:#4caf50">●</span>':''}</td>
+    const rowClass = [d.active?'active-row':'', isSel?'sel-row':''].filter(Boolean).join(' ');
+    return `<tr class="${rowClass}" onclick="toggleSel('${key}')">
+      <td class="left">${d.launch}${d.active?'<span class="vtuber-badge" style="background:#e6f4ea;color:#2d8a45">●</span>':''}</td>
+      ${typeCell}
       ${nameCell}
-      <td>${fmt(d.days)}일</td>
-      <td class="col-group-total">${fmt(d.total_u)}</td>
-      <td class="col-group-total">${fmt(d.total_uc)}</td>
-      <td class="col-group-total">${arppu(d.total_uc,d.total_u)}</td>
+      <td>${fmt(d.days)}d</td>
+      <td class="col-group-total">${fmt(dispU)}</td>
+      <td class="col-sub">${fmt(dispUC)}</td>
+      <td class="col-sub">${arppu(dispUC,dispU)}</td>
       <td class="col-group-total">${fmt(d.npu_u)}</td>
       ${lvCells}
       <td class="col-group-npu">${fmt(d.npu_u)}</td>
-      <td class="col-group-npu">${fmt(d.npu_uc)}</td>
-      <td class="col-group-npu">${arppu(d.npu_uc,d.npu_u)}</td>
+      <td class="col-sub">${fmt(d.npu_uc)}</td>
+      <td class="col-sub">${arppu(d.npu_uc,d.npu_u)}</td>
       <td class="col-group-ret">${fmt(d.ret_u)}</td>
-      <td class="col-group-ret">${fmt(d.ret_uc)}</td>
-      <td class="col-group-ret">${arppu(d.ret_uc,d.ret_u)}</td>
+      <td class="col-sub">${fmt(d.ret_uc)}</td>
+      <td class="col-sub">${arppu(d.ret_uc,d.ret_u)}</td>
     </tr>`;
   });
 
   tbody.innerHTML = rows.join('');
+  const dpLabel = curDp==='total' ? 'Total' : `D+${curDp}`;
+  const methodLong = curMethod==='period'?t('method_period_long'):curMethod==='3m'?t('method_3m_long'):t('method_1m_long');
   document.getElementById('footer').textContent =
-    `${filtered.length}개 표시 중 / 전체 ${data.length}개 | 과금 레벨 기준: ${
-      curMethod==='period'?'판매기간 30일 정규화':curMethod==='3m'?'직전 3개월 평균':'직전 1개월'}`;
+    `${t('shown_of', filtered.length, data.length)} | ${methodLong} | ${dpLabel}`;
 }
 
+applyLang();
+document.getElementById('btnSel').textContent = t('sel_n', 0);
 buildHeader();
 render();
 </script>
