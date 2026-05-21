@@ -6,8 +6,7 @@ set -a; source .env; set +a
 echo "$(date): Generating dashboard..."
 python3 generate.py
 
-git add dist/index.html product_cache.json 2>/dev/null || true
-git diff --staged --quiet || (git commit -m "Update dashboard $(date +'%Y-%m-%d')" && git push)
+git diff --quiet || (git add -u && git commit -m "Update cache $(date +'%Y-%m-%d')" && git push)
 
 echo "$(date): Deploying to Cloudflare..."
 npx wrangler deploy
