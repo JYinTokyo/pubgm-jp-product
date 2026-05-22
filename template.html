@@ -20,11 +20,21 @@ body{background:#f0f2f8;color:#1e2235;font-family:'Segoe UI',sans-serif;font-siz
 .search-wrap{margin-left:auto}
 .search-wrap input{background:#f4f6fc;border:1px solid #dde1f0;border-radius:5px;padding:5px 10px;color:#1e2235;font-size:12px;width:180px}
 .search-wrap input::placeholder{color:#aab0c0}
-.table-wrap{overflow-x:auto;padding:16px 20px}
+.table-wrap{overflow-x:scroll;padding:16px 20px}
 table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}
 th{background:#f4f6fc;color:#6b7280;font-weight:600;padding:7px 10px;text-align:right;border-bottom:2px solid #dde1f0;position:sticky;top:0;z-index:2}
 th.left{text-align:left}
 th.group-header{text-align:center;background:#eef0f8;color:#3b5bdb;font-size:11px;border-bottom:1px solid #dde1f0}
+/* sticky left columns */
+.sl0{position:sticky;left:0;z-index:3;background:inherit}
+.sl1{position:sticky;left:102px;z-index:3;background:inherit}
+.sl2{position:sticky;left:188px;z-index:3;background:inherit}
+th.sl0,th.sl1,th.sl2{z-index:4;background:#f4f6fc}
+tr:hover .sl0,tr:hover .sl1,tr:hover .sl2{background:#f4f6fc}
+tr.active-row .sl0,tr.active-row .sl1,tr.active-row .sl2{background:#f0faf3}
+tr.active-row:hover .sl0,tr.active-row:hover .sl1,tr.active-row:hover .sl2{background:#e8f7ed}
+tr.sel-row .sl0,tr.sel-row .sl1,tr.sel-row .sl2{background:#eef1ff!important}
+tr.sel-row:hover .sl0,tr.sel-row:hover .sl1,tr.sel-row:hover .sl2{background:#e6eaff!important}
 td{padding:6px 10px;text-align:right;border-bottom:1px solid #e8ebf5;color:#374160}
 td.left{text-align:left;color:#1e2235}
 td.name{max-width:200px;overflow:hidden;text-overflow:ellipsis}
@@ -401,13 +411,15 @@ function exportCSV(){
       const ucPct = dispUC ? (uc/dispUC*100).toFixed(1) : 0;
       return [u, puPct, uc, ucPct, u ? (uc/u*UC_TO_USD).toFixed(2) : 0];
     });
+    const npCsv  = getDnData(d, 'npu', curDp);
+    const retCsv = getDnData(d, 'ret', curDp);
     return [
       d.launch, isSpin?'Spin':'Crate', d.name||d.id, d.id, d.days,
       d.active?'Y':'N', d.vtuber?'Y':'N',
-      dispU, dispUC, dispU ? (dispUC/dispU*UC_TO_USD).toFixed(2) : 0, d.npu_u,
+      dispU, dispUC, dispU ? (dispUC/dispU*UC_TO_USD).toFixed(2) : 0, npCsv.u,
       ...lvVals,
-      d.npu_u, d.npu_uc, d.npu_u ? (d.npu_uc/d.npu_u*UC_TO_USD).toFixed(2) : 0,
-      d.ret_u, d.ret_uc, d.ret_u ? (d.ret_uc/d.ret_u*UC_TO_USD).toFixed(2) : 0
+      npCsv.u, npCsv.uc, npCsv.u ? (npCsv.uc/npCsv.u*UC_TO_USD).toFixed(2) : 0,
+      retCsv.u, retCsv.uc, retCsv.u ? (retCsv.uc/retCsv.u*UC_TO_USD).toFixed(2) : 0
     ];
   });
 
@@ -431,6 +443,12 @@ function arppu(uc,u){
   return '$' + (uc/u * UC_TO_USD).toFixed(2);
 }
 
+function getDnData(d, type, dp){
+  const dn = d[type+'_dn'];
+  if(dp !== 'total' && dn && dn[dp]) return {u: dn[dp][0], uc: dn[dp][1]};
+  return {u: d[type+'_u'], uc: d[type+'_uc']};
+}
+
 function getLvData(item, lv){
   const m = item.level && item.level[curMethod];
   if(!m) return {u:0, uc:0};
@@ -445,9 +463,9 @@ function buildHeader(){
   const thead = document.getElementById('thead');
   thead.innerHTML = `
     <tr>
-      <th class="left" rowspan="2" style="min-width:40px">Launch</th>
-      <th class="left" rowspan="2" style="min-width:50px">Type</th>
-      <th class="left" rowspan="2" style="min-width:180px">Product</th>
+      <th class="left sl0" rowspan="2" style="min-width:100px">Launch</th>
+      <th class="left sl1" rowspan="2" style="min-width:84px">Type</th>
+      <th class="left sl2" rowspan="2" style="min-width:200px">Product</th>
       <th rowspan="2">Duration</th>
       <th class="group-header col-group-total" colspan="3">Total</th>
       <th class="group-header col-group-total" colspan="1">NPU</th>
@@ -564,23 +582,25 @@ function render(){
       return `<td class="col-group-lv" style="${puSt}">${fmt(u)}</td><td class="col-sub" style="${puSt}">${pct(u,dispU)}</td><td class="col-sub" style="${ucSt}">${fmt(uc)}</td><td class="col-sub" style="${ucSt}">${pct(uc,dispUC)}</td><td class="col-sub">${arppu(uc,u)}</td>`;
     }).join('');
 
+    const npData  = getDnData(d, 'npu', curDp);
+    const retData = getDnData(d, 'ret', curDp);
     const rowClass = [d.active?'active-row':'', isSel?'sel-row':''].filter(Boolean).join(' ');
     return `<tr class="${rowClass}" onclick="toggleSel('${key}')">
-      <td class="left">${d.launch}${d.active?'<span class="vtuber-badge" style="background:#e6f4ea;color:#2d8a45">●</span>':''}</td>
-      ${typeCell}
-      ${nameCell}
+      <td class="left sl0">${d.launch}${d.active?'<span class="vtuber-badge" style="background:#e6f4ea;color:#2d8a45">●</span>':''}</td>
+      ${typeCell.replace('<td class="left"','<td class="left sl1"')}
+      ${nameCell.replace('<td class="left','<td class="left sl2')}
       <td>${fmt(d.days)}d</td>
       <td class="col-group-total">${fmt(dispU)}</td>
       <td class="col-sub">${fmt(dispUC)}</td>
       <td class="col-sub">${arppu(dispUC,dispU)}</td>
-      <td class="col-group-total">${fmt(d.npu_u)}</td>
+      <td class="col-group-total">${fmt(npData.u)}</td>
       ${lvCells}
-      <td class="col-group-npu">${fmt(d.npu_u)}</td>
-      <td class="col-sub">${fmt(d.npu_uc)}</td>
-      <td class="col-sub">${arppu(d.npu_uc,d.npu_u)}</td>
-      <td class="col-group-ret">${fmt(d.ret_u)}</td>
-      <td class="col-sub">${fmt(d.ret_uc)}</td>
-      <td class="col-sub">${arppu(d.ret_uc,d.ret_u)}</td>
+      <td class="col-group-npu">${fmt(npData.u)}</td>
+      <td class="col-sub">${fmt(npData.uc)}</td>
+      <td class="col-sub">${arppu(npData.uc,npData.u)}</td>
+      <td class="col-group-ret">${fmt(retData.u)}</td>
+      <td class="col-sub">${fmt(retData.uc)}</td>
+      <td class="col-sub">${arppu(retData.uc,retData.u)}</td>
     </tr>`;
   });
 

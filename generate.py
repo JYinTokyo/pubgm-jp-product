@@ -14,7 +14,7 @@ WAREHOUSE_ID    = "e87bfc435cb9ad4e"
 TODAY           = date.today().isoformat()          # YYYY-MM-DD
 DATA_CUTOFF     = (date.today() - timedelta(days=2)).isoformat()  # 데이터는 2일 전까지
 CACHE_FILE      = os.path.join(os.path.dirname(__file__), 'product_cache.json')
-CACHE_VER       = 3
+CACHE_VER       = 4
 SPIN_XLSX       = os.path.join(os.path.dirname(__file__), 'Spin.xlsx')
 # pubgm-jp-item 프로젝트의 Spin.xlsx 참조 (없으면 그쪽 것 사용)
 if not os.path.exists(SPIN_XLSX):
@@ -403,6 +403,66 @@ def build_level_map(rows, id_key='spin_id'):
         }
     return result
 
+def make_spin_npu_sql(spin_ids, cutoff):
+    """spin_kpi_stat에서 D+n별 nbu_user/return_user 쿼리"""
+    ids_str = ','.join(str(i) for i in spin_ids)
+    return f"""
+SELECT
+  CAST(spin_contents AS STRING) AS spin_id,
+  DATEDIFF(std_dt, launch_spin_date) AS d_preset,
+  CAST(nbu_user AS BIGINT) AS npu_u,
+  CAST(nbu_amount AS BIGINT) AS npu_uc,
+  CAST(return_user AS BIGINT) AS ret_u,
+  CAST(return_amount AS BIGINT) AS ret_uc
+FROM pubgm_mart.spin_kpi_stat
+WHERE country = 'JP'
+  AND spin_contents IN ({ids_str})
+  AND launch_spin_date >= ADD_MONTHS(CURRENT_DATE(), -36)
+  AND std_dt <= DATE('{cutoff}')
+  AND DATEDIFF(std_dt, launch_spin_date) BETWEEN 0 AND 60
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY spin_contents, DATEDIFF(std_dt, launch_spin_date)
+  ORDER BY std_dt DESC
+) = 1
+ORDER BY spin_id, d_preset
+"""
+
+def make_box_npu_sql(box_ids, cutoff):
+    """crate_kpi_info에서 D+n별 nbu_user/return_user 쿼리"""
+    ids_str = ','.join("'" + b.replace("'", "''") + "'" for b in box_ids)
+    return f"""
+SELECT
+  crate AS box_id,
+  DATEDIFF(std_dt, launch_chest_date) AS d_preset,
+  CAST(nbu_user AS BIGINT) AS npu_u,
+  CAST(nbu_amount AS BIGINT) AS npu_uc,
+  CAST(return_user AS BIGINT) AS ret_u,
+  CAST(return_amount AS BIGINT) AS ret_uc
+FROM pubgm_mart.crate_kpi_info
+WHERE country = 'JP'
+  AND crate IN ({ids_str})
+  AND launch_chest_date >= ADD_MONTHS(CURRENT_DATE(), -36)
+  AND std_dt <= DATE('{cutoff}')
+  AND DATEDIFF(std_dt, launch_chest_date) BETWEEN 0 AND 60
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY crate, DATEDIFF(std_dt, launch_chest_date)
+  ORDER BY std_dt DESC
+) = 1
+ORDER BY box_id, d_preset
+"""
+
+def build_npu_map(rows, id_key='spin_id'):
+    """D+n NBU/Return 쿼리 결과를 {id: {npu_dn: {dp:[u,uc]}, ret_dn: {dp:[u,uc]}}} 로 변환"""
+    result = {}
+    for r in rows:
+        pid = r[id_key]
+        dp  = str(r['d_preset'])
+        if pid not in result:
+            result[pid] = {'npu_dn': {}, 'ret_dn': {}}
+        result[pid]['npu_dn'][dp] = [int(r['npu_u'] or 0), int(r['npu_uc'] or 0)]
+        result[pid]['ret_dn'][dp]  = [int(r['ret_u'] or 0), int(r['ret_uc'] or 0)]
+    return result
+
 ACTIVE_THRESHOLD = (date.today() - timedelta(days=3)).isoformat()
 
 def is_active(last_std_dt_str):
@@ -432,7 +492,9 @@ def main():
     print(f"Spins: {len(raw_spins)}, Boxes: {len(raw_boxes)}")
 
     spin_level = {}
-    box_level = {}
+    box_level  = {}
+    spin_npu   = {}
+    box_npu    = {}
 
     if quick:
         print("--quick mode: skipping pay level queries")
@@ -460,9 +522,16 @@ def main():
                 rows = run_query(token, make_spin_level_sql(batch, DATA_CUTOFF), f'spin_level_b{i//BATCH+1}')
                 batch_lv = build_level_map(rows, 'spin_id')
                 spin_level.update(batch_lv)
+                npu_rows = run_query(token, make_spin_npu_sql(batch, DATA_CUTOFF), f'spin_npu_b{i//BATCH+1}')
+                batch_npu = build_npu_map(npu_rows, 'spin_id')
+                spin_npu.update(batch_npu)
                 for sid in batch:
-                    if sid in spin_level and sid in all_spin_ids_set:
-                        cache['spins'][sid] = spin_level[sid]
+                    if sid in all_spin_ids_set:
+                        cache['spins'][sid] = {
+                            'level':  spin_level.get(sid, {}),
+                            'npu_dn': spin_npu.get(sid, {}).get('npu_dn', {}),
+                            'ret_dn': spin_npu.get(sid, {}).get('ret_dn', {}),
+                        }
                 save_cache(cache)
 
         query_box_ids = active_box_ids + done_box_ids
@@ -475,18 +544,29 @@ def main():
                 rows = run_query(token, make_box_level_sql(batch, DATA_CUTOFF), f'box_level_b{i//BATCH+1}')
                 batch_lv = build_level_map(rows, 'box_id')
                 box_level.update(batch_lv)
+                npu_rows = run_query(token, make_box_npu_sql(batch, DATA_CUTOFF), f'box_npu_b{i//BATCH+1}')
+                batch_npu = build_npu_map(npu_rows, 'box_id')
+                box_npu.update(batch_npu)
                 for bid in batch:
-                    if bid in box_level and bid in all_box_ids_set:
-                        cache['boxes'][bid] = box_level[bid]
+                    if bid in all_box_ids_set:
+                        cache['boxes'][bid] = {
+                            'level':  box_level.get(bid, {}),
+                            'npu_dn': box_npu.get(bid, {}).get('npu_dn', {}),
+                            'ret_dn': box_npu.get(bid, {}).get('ret_dn', {}),
+                        }
                 save_cache(cache)
 
-    # 캐시에서 완료 상품 레벨 데이터 로드
-    for sid, lv in cache['spins'].items():
+    # 캐시에서 완료 상품 데이터 로드
+    for sid, cached in cache['spins'].items():
         if sid not in spin_level:
-            spin_level[sid] = lv
-    for bid, lv in cache['boxes'].items():
+            spin_level[sid] = cached.get('level', {}) if isinstance(cached, dict) else cached
+        if sid not in spin_npu:
+            spin_npu[sid] = {'npu_dn': cached.get('npu_dn', {}), 'ret_dn': cached.get('ret_dn', {})} if isinstance(cached, dict) else {}
+    for bid, cached in cache['boxes'].items():
         if bid not in box_level:
-            box_level[bid] = lv
+            box_level[bid] = cached.get('level', {}) if isinstance(cached, dict) else cached
+        if bid not in box_npu:
+            box_npu[bid] = {'npu_dn': cached.get('npu_dn', {}), 'ret_dn': cached.get('ret_dn', {})} if isinstance(cached, dict) else {}
 
     # ── JSON 데이터 구축 ──────────────────────────────────────────────────────
     def make_basic(r, id_key):
@@ -512,6 +592,8 @@ def main():
         d['spin_type'] = r.get('spin_type', '')
         d['vtuber'] = int(sid) in VTUBER_SPIN_IDS if sid.isdigit() else False
         d['level'] = spin_level.get(sid, {})
+        d['npu_dn'] = spin_npu.get(sid, {}).get('npu_dn', {})
+        d['ret_dn'] = spin_npu.get(sid, {}).get('ret_dn', {})
         spin_data.append(d)
 
     box_data = []
@@ -521,6 +603,8 @@ def main():
         d['name'] = BOX_NAME_OVERRIDES.get(bid, bid)
         d['vtuber'] = bid in VTUBER_BOX_NAMES
         d['level'] = box_level.get(bid, {})
+        d['npu_dn'] = box_npu.get(bid, {}).get('npu_dn', {})
+        d['ret_dn'] = box_npu.get(bid, {}).get('ret_dn', {})
         box_data.append(d)
 
     def compact_level(lv_data):
