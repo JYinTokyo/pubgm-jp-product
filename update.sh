@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 cd /Users/kim_yeong/my-project/pubgm-jp-product
 set -a; source .env; set +a
 
