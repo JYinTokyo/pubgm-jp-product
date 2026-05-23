@@ -6,7 +6,7 @@
 <title>PUBGM JP Product KPI</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#f0f2f8;color:#1e2235;font-family:'Segoe UI',sans-serif;font-size:13px}
+body{background:#f0f2f8;color:#1e2235;font-family:'Segoe UI',sans-serif;font-size:13px;display:flex;flex-direction:column;height:100vh;overflow:hidden}
 .header{background:#fff;border-bottom:1px solid #dde1f0;padding:12px 20px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
 .header h1{font-size:16px;font-weight:700;color:#1e2235}
 .badge{background:#eef0f8;border-radius:4px;padding:2px 8px;font-size:11px;color:#6b7280}
@@ -20,16 +20,21 @@ body{background:#f0f2f8;color:#1e2235;font-family:'Segoe UI',sans-serif;font-siz
 .search-wrap{margin-left:auto}
 .search-wrap input{background:#f4f6fc;border:1px solid #dde1f0;border-radius:5px;padding:5px 10px;color:#1e2235;font-size:12px;width:180px}
 .search-wrap input::placeholder{color:#aab0c0}
-.table-wrap{overflow-x:scroll;padding:16px 20px}
-table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}
-th{background:#f4f6fc;color:#6b7280;font-weight:600;padding:7px 10px;text-align:right;border-bottom:2px solid #dde1f0;position:sticky;top:0;z-index:2}
+.table-wrap{overflow:auto;flex:1;min-height:0}
+.table-wrap::-webkit-scrollbar{height:8px;width:8px}
+.table-wrap::-webkit-scrollbar-track{background:#f1f3fa}
+.table-wrap::-webkit-scrollbar-thumb{background:#c4cae0;border-radius:4px}
+.table-wrap::-webkit-scrollbar-thumb:hover{background:#9aa0c0}
+table{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;white-space:nowrap}
+thead{position:sticky;top:0;z-index:10;background:#f4f6fc}
+th{background:#f4f6fc;color:#6b7280;font-weight:600;padding:7px 10px;text-align:right;border-bottom:2px solid #dde1f0}
 th.left{text-align:left}
 th.group-header{text-align:center;background:#eef0f8;color:#3b5bdb;font-size:11px;border-bottom:1px solid #dde1f0}
 /* sticky left columns */
-.sl0{position:sticky;left:0;z-index:3;background:inherit}
-.sl1{position:sticky;left:102px;z-index:3;background:inherit}
-.sl2{position:sticky;left:188px;z-index:3;background:inherit}
-th.sl0,th.sl1,th.sl2{z-index:4;background:#f4f6fc}
+.sl0{position:sticky;left:0;z-index:3;background:#fff}
+.sl1{position:sticky;left:102px;z-index:3;background:#fff}
+.sl2{position:sticky;left:188px;z-index:3;background:#fff}
+th.sl0,th.sl1,th.sl2{z-index:11;background:#f4f6fc}
 tr:hover .sl0,tr:hover .sl1,tr:hover .sl2{background:#f4f6fc}
 tr.active-row .sl0,tr.active-row .sl1,tr.active-row .sl2{background:#f0faf3}
 tr.active-row:hover .sl0,tr.active-row:hover .sl1,tr.active-row:hover .sl2{background:#e8f7ed}
@@ -163,9 +168,8 @@ thead th.col-group-ret{border-left:3px solid #bcc4d8}
     <thead id="thead"></thead>
     <tbody id="tbody"></tbody>
   </table>
+  <div class="footer" id="footer"></div>
 </div>
-
-<div class="footer" id="footer"></div>
 
 <script>
 const SPIN_DATA = %%SPIN_DATA%%;
@@ -605,6 +609,13 @@ function render(){
   });
 
   tbody.innerHTML = rows.join('');
+  // fix left sticky column offsets based on actual rendered widths
+  if(tbody.rows[0] && tbody.rows[0].cells.length >= 3){
+    const w0 = tbody.rows[0].cells[0].getBoundingClientRect().width;
+    const w1 = tbody.rows[0].cells[1].getBoundingClientRect().width;
+    document.querySelectorAll('.sl1').forEach(el => { el.style.left = w0 + 'px'; });
+    document.querySelectorAll('.sl2').forEach(el => { el.style.left = (w0+w1) + 'px'; });
+  }
   const dpLabel = curDp==='total' ? 'Total' : `D+${curDp}`;
   const methodLong = curMethod==='period'?t('method_period_long'):curMethod==='3m'?t('method_3m_long'):t('method_1m_long');
   document.getElementById('footer').textContent =
