@@ -360,9 +360,12 @@ def load_spin_names():
         import openpyxl
         wb = openpyxl.load_workbook(SPIN_XLSX, read_only=True, data_only=True)
         ws = wb.active
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            if row[1] and row[2]:
-                names[str(int(row[1]))] = str(row[2])
+        for row in ws.iter_rows(min_row=3, values_only=True):
+            if len(row) >= 4 and row[2] and row[3]:
+                try:
+                    names[str(int(float(row[2])))] = str(row[3])
+                except (ValueError, TypeError):
+                    continue
         wb.close()
         print(f"Spin names loaded: {len(names)}")
     except Exception as e:
