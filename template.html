@@ -51,7 +51,19 @@ tr.active-row:hover td{background:#e8f7ed}
 tr.sel-row td{background:#eef1ff!important;border-left:2px solid #3b5bdb}
 tr.sel-row:hover td{background:#e6eaff!important}
 tr.active-row.sel-row td{background:#e8f0fa!important}
-.vtuber-badge{display:inline-block;background:#f5e6ff;color:#9333ea;border-radius:3px;padding:1px 5px;font-size:10px;margin-left:4px}
+.cat-badge{display:inline-block;border-radius:3px;padding:1px 5px;font-size:10px;margin-left:4px;font-weight:600}
+.badge-vt{background:#f5e6ff;color:#9333ea}
+.badge-xs{background:#e0f2fe;color:#0369a1}
+.badge-gt{background:#fef9c3;color:#92400e}
+.badge-sc{background:#fee2e2;color:#b91c1c}
+.cat-wrap{position:relative}
+.cat-btn{background:#f4f6fc;border:1px solid #dde1f0;border-radius:5px;padding:5px 10px;font-size:12px;color:#374160;cursor:pointer;white-space:nowrap}
+.cat-btn:hover{background:#eef0f8}
+.cat-btn.filtered{background:#eef1ff;border-color:#c0c8e8;color:#3b5bdb;font-weight:600}
+.cat-popup{display:none;position:fixed;z-index:300;background:#fff;border:1px solid #dde1f0;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);padding:4px 0;min-width:160px}
+.cat-popup label{display:flex;align-items:center;gap:8px;padding:6px 14px;cursor:pointer;color:#374160;font-size:12px;user-select:none}
+.cat-popup label:hover{background:#f4f6fc}
+.cat-popup .cat-sep{border-top:1px solid #e8ebf5;margin:4px 0}
 .no-data{text-align:center;color:#9aa0b8;padding:40px;font-size:13px}
 
 /* 과금 레벨 색상 */
@@ -109,11 +121,20 @@ thead th.col-group-ret{border-left:3px solid #bcc4d8}
 
   <div class="sep"></div>
 
-  <!-- VTuber 필터 -->
-  <div class="btn-group" id="vtGroup">
-    <button class="active" onclick="setVt('all',this)" data-i18n="all">전체</button>
-    <button onclick="setVt('vtuber',this)">VTuber</button>
-    <button onclick="setVt('normal',this)" data-i18n="normal">일반</button>
+  <!-- 카테고리 필터 -->
+  <div class="cat-wrap">
+    <button class="cat-btn" id="catBtn" onclick="toggleCatPopup(event)" data-i18n="category_btn">카테고리 ▼</button>
+    <div class="cat-popup" id="catPopup">
+      <label onclick="toggleAllCat(event)">
+        <input type="checkbox" id="catChkAll" checked> <span data-i18n="all">전체</span>
+      </label>
+      <div class="cat-sep"></div>
+      <label onclick="toggleCat(event,'vtuber')"><input type="checkbox" id="catChk_vtuber" checked> VTuber</label>
+      <label onclick="toggleCat(event,'xsuit')"><input type="checkbox" id="catChk_xsuit" checked> X-suit</label>
+      <label onclick="toggleCat(event,'gilt')"><input type="checkbox" id="catChk_gilt" checked> GILT</label>
+      <label onclick="toggleCat(event,'sportcar')"><input type="checkbox" id="catChk_sportcar" checked> Sport Car</label>
+      <label onclick="toggleCat(event,'normal')"><input type="checkbox" id="catChk_normal" checked> <span data-i18n="cat_normal">일반</span></label>
+    </div>
   </div>
 
   <div class="sep"></div>
@@ -124,6 +145,23 @@ thead th.col-group-ret{border-left:3px solid #bcc4d8}
     <button class="active" onclick="setMethod('period',this)" data-i18n="method_period" data-i18n-title="method_period_title" title="판매 기간 중 충전 / 기간일수 × 30">판매기간</button>
     <button onclick="setMethod('3m',this)" data-i18n="method_3m" data-i18n-title="method_3m_title" title="출시 전 3개월 평균 충전">직전 3개월</button>
     <button onclick="setMethod('1m',this)" data-i18n="method_1m" data-i18n-title="method_1m_title" title="출시 전 1개월 충전">직전 1개월</button>
+  </div>
+  <button id="methodHelpBtn" onclick="toggleMethodHelp(event)" style="width:18px;height:18px;border-radius:50%;border:1px solid #aaa;background:#f5f5f8;color:#666;font-size:11px;cursor:pointer;line-height:1;padding:0;margin-left:4px;flex-shrink:0">?</button>
+  <div id="methodHelpPopup" style="display:none;position:fixed;z-index:999;background:#fff;border:1px solid #dde;border-radius:8px;padding:14px 16px;box-shadow:0 4px 16px rgba(0,0,0,.12);width:320px;font-size:12px;line-height:1.6;color:#333">
+    <div style="font-weight:700;margin-bottom:8px;font-size:13px">과금 레벨 기준 설명</div>
+    <div style="margin-bottom:10px">
+      <span style="font-weight:600;color:#3b4fd8">판매기간</span><br>
+      출시일 기준 직전 30일 충전 레벨 스냅샷. 직전 1개월과 유사하나 출시 당일 기준으로 산출.
+    </div>
+    <div style="margin-bottom:10px">
+      <span style="font-weight:600;color:#3b4fd8">직전 3개월</span><br>
+      출시 전 3개월 평균 충전액 기준. 상품 구매의 영향을 받지 않아 순수한 과금 성향을 반영. 분석 권장 기준.
+    </div>
+    <div>
+      <span style="font-weight:600;color:#3b4fd8">직전 1개월</span><br>
+      출시 전 1개월 충전액 기준. 가장 최근 과금 성향을 반영하나 월별 변동성이 큼.
+    </div>
+    <div style="margin-top:10px;padding-top:8px;border-top:1px solid #eee;color:#888;font-size:11px">클릭하거나 바깥을 클릭하면 닫힘</div>
   </div>
 
   <div class="sep"></div>
@@ -185,6 +223,8 @@ const I18N = {
     active_count:        n=>`판매 중 ${n}개`,
     all:                 '전체',
     normal:              '일반',
+    category_btn:        '카테고리 ▼',
+    cat_normal:          '일반',
     pay_level_label:     '과금 레벨 기준:',
     method_period:       '판매기간',
     method_3m:           '직전 3개월',
@@ -209,6 +249,8 @@ const I18N = {
     active_count:        n=>`${n} Active`,
     all:                 'All',
     normal:              'Normal',
+    category_btn:        'Category ▼',
+    cat_normal:          'Normal',
     pay_level_label:     'Pay Level:',
     method_period:       'Sale Period',
     method_3m:           'Prev 3M',
@@ -233,6 +275,8 @@ const I18N = {
     active_count:        n=>`販売中 ${n}件`,
     all:                 '全て',
     normal:              '通常',
+    category_btn:        'カテゴリ ▼',
+    cat_normal:          '通常',
     pay_level_label:     '課金レベル:',
     method_period:       '販売期間',
     method_3m:           '直前3ヶ月',
@@ -261,6 +305,7 @@ function setLang(lang){
   curLang = lang;
   document.querySelectorAll('.lang-btn').forEach(b=>b.classList.toggle('active', b.dataset.lang===lang));
   applyLang();
+  updateCatUI();
   render();
 }
 function applyLang(){
@@ -287,8 +332,10 @@ function heatBg(lv, val, maxVal){
 }
 function pct(a,b){ return b ? (a/b*100).toFixed(1)+'%' : '-'; }
 
+const ALL_CATS = ['vtuber','xsuit','gilt','sportcar','normal'];
+const checkedCats = new Set(ALL_CATS);
+
 let curType    = 'all';
-let curVt      = 'all';
 let curMethod  = 'period';
 let curDp      = 'total';
 let curStatus  = 'all';
@@ -301,12 +348,59 @@ function setType(v,btn){
   btn.classList.add('active');
   render();
 }
-function setVt(v,btn){
-  curVt=v;
-  document.querySelectorAll('#vtGroup button').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
+function toggleCatPopup(e){
+  e.stopPropagation();
+  const popup = document.getElementById('catPopup');
+  const btn   = document.getElementById('catBtn');
+  const rect  = btn.getBoundingClientRect();
+  if(popup.style.display === 'none' || !popup.style.display){
+    popup.style.display = 'block';
+    popup.style.top  = (rect.bottom + 4) + 'px';
+    popup.style.left = rect.left + 'px';
+  } else {
+    popup.style.display = 'none';
+  }
+}
+function toggleAllCat(e){
+  e.stopPropagation();
+  if(checkedCats.size === ALL_CATS.length){
+    // 전체 체크 상태 → 모두 해제
+    checkedCats.clear();
+  } else {
+    // 일부 해제 상태 → 모두 체크
+    ALL_CATS.forEach(c => checkedCats.add(c));
+  }
+  updateCatUI();
   render();
 }
+function toggleCat(e, id){
+  e.stopPropagation();
+  if(checkedCats.has(id)) checkedCats.delete(id);
+  else checkedCats.add(id);
+  updateCatUI();
+  render();
+}
+function updateCatUI(){
+  const allChecked = checkedCats.size === ALL_CATS.length;
+  document.getElementById('catChkAll').checked = allChecked;
+  document.getElementById('catChkAll').indeterminate = !allChecked && checkedCats.size > 0;
+  ALL_CATS.forEach(c => {
+    document.getElementById('catChk_'+c).checked = checkedCats.has(c);
+  });
+  const btn = document.getElementById('catBtn');
+  const isFiltered = !allChecked;
+  btn.classList.toggle('filtered', isFiltered);
+  btn.textContent = isFiltered
+    ? `${t('category_btn').replace(' ▼','')}(${checkedCats.size}/${ALL_CATS.length}) ▼`
+    : t('category_btn');
+}
+document.addEventListener('click', function(){
+  const popup = document.getElementById('catPopup');
+  if(popup) popup.style.display = 'none';
+  const mPopup = document.getElementById('methodHelpPopup');
+  if(mPopup) mPopup.style.display = 'none';
+});
+
 function setMethod(v,btn){
   curMethod=v;
   document.querySelectorAll('#methodGroup button').forEach(b=>b.classList.remove('active'));
@@ -314,6 +408,19 @@ function setMethod(v,btn){
   render();
 }
 
+function toggleMethodHelp(e){
+  e.stopPropagation();
+  const popup = document.getElementById('methodHelpPopup');
+  const btn   = document.getElementById('methodHelpBtn');
+  const rect  = btn.getBoundingClientRect();
+  if(popup.style.display === 'none'){
+    popup.style.display = 'block';
+    popup.style.top  = (rect.bottom + 6) + 'px';
+    popup.style.left = Math.max(8, rect.left - 140) + 'px';
+  } else {
+    popup.style.display = 'none';
+  }
+}
 function toggleDpTotal(btn){
   if(btn.classList.contains('active')){
     // 해제 → 슬라이더 활성화
@@ -501,8 +608,15 @@ function getFiltered(){
   const search = document.getElementById('searchInput').value.trim().toLowerCase();
 
   let filtered = data.filter(d => {
-    if(curVt === 'vtuber' && !d.vtuber) return false;
-    if(curVt === 'normal' && d.vtuber) return false;
+    if(checkedCats.size < ALL_CATS.length){
+      const isNormal = !d.vtuber && !d.cat_xsuit && !d.cat_gilt && !d.cat_sportcar;
+      const ok = (checkedCats.has('vtuber')   && d.vtuber)
+              || (checkedCats.has('xsuit')    && d.cat_xsuit)
+              || (checkedCats.has('gilt')     && d.cat_gilt)
+              || (checkedCats.has('sportcar') && d.cat_sportcar)
+              || (checkedCats.has('normal')   && isNormal);
+      if(!ok) return false;
+    }
     if(curStatus === 'active' && !d.active) return false;
     if(curStatus === 'done' && d.active) return false;
     if(search){
@@ -575,9 +689,15 @@ function render(){
   // Pass 3: render
   const rows = rowInfos.map(({d, key, isSel, isSpin, dispU, dispUC, lvDataMap}) => {
     const typeCell = `<td class="left"><span style="background:${isSpin?'#dbeafe':'#f3e8ff'};color:${isSpin?'#1d4ed8':'#7e22ce'};border-radius:3px;padding:2px 7px;font-size:11px;font-weight:500">${isSpin?'Spin':'Crate'}</span></td>`;
+    const badges = [
+      d.vtuber       ? '<span class="cat-badge badge-vt">VT</span>' : '',
+      d.cat_xsuit    ? '<span class="cat-badge badge-xs">XS</span>' : '',
+      d.cat_gilt     ? '<span class="cat-badge badge-gt">GT</span>' : '',
+      d.cat_sportcar ? '<span class="cat-badge badge-sc">SC</span>' : '',
+    ].join('');
     const nameCell = isSpin
-      ? `<td class="left name">${d.vtuber?'<span class="vtuber-badge">VT</span> ':''}${d.name}<div class="id-sub">${d.id}</div></td>`
-      : `<td class="left name">${d.vtuber?'<span class="vtuber-badge">VT</span> ':''}${d.name||d.id}</td>`;
+      ? `<td class="left name">${badges} ${d.name}<div class="id-sub">${d.id}</div></td>`
+      : `<td class="left name">${badges} ${d.name||d.id}</td>`;
 
     const lvCells = LEVELS.map(lv => {
       const {u, uc} = lvDataMap[lv];
@@ -623,6 +743,7 @@ function render(){
 }
 
 applyLang();
+updateCatUI();
 document.getElementById('btnSel').textContent = t('sel_n', 0);
 buildHeader();
 render();

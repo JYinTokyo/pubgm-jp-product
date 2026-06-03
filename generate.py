@@ -10,11 +10,11 @@ import json, os, sys, ssl, time, urllib.request, urllib.error, http.client
 from datetime import datetime, date, timedelta
 
 DATABRICKS_HOST = "https://krafton-hq.cloud.databricks.com"
-WAREHOUSE_ID    = "e87bfc435cb9ad4e"
+WAREHOUSE_ID    = "e87bfc435cb9ad4e"  # external warehouse (shared 불안정 시 대체)
 TODAY           = date.today().isoformat()          # YYYY-MM-DD
 DATA_CUTOFF     = (date.today() - timedelta(days=2)).isoformat()  # 데이터는 2일 전까지
 CACHE_FILE      = os.path.join(os.path.dirname(__file__), 'product_cache.json')
-CACHE_VER       = 4
+CACHE_VER       = 8
 SPIN_XLSX       = os.path.join(os.path.dirname(__file__), 'Spin.xlsx')
 # pubgm-jp-item 프로젝트의 Spin.xlsx 참조 (없으면 그쪽 것 사용)
 if not os.path.exists(SPIN_XLSX):
@@ -41,8 +41,15 @@ def api(token, path, method='GET', body=None):
         headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
         method=method
     )
-    with urllib.request.urlopen(req, context=CTX) as r:
-        return json.loads(r.read())
+    attempts = 1 if method == 'POST' else 5
+    for attempt in range(attempts):
+        try:
+            with urllib.request.urlopen(req, context=CTX, timeout=60) as r:
+                return json.loads(r.read())
+        except (http.client.IncompleteRead, urllib.error.URLError, TimeoutError, OSError) as e:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(15 * (attempt + 1))
 
 def run_query(token, sql, label=''):
     if label:
@@ -113,46 +120,64 @@ END"""
 LEVELS = ['Non-Paid', 'Lv_1', 'Lv_2', 'Lv_3', 'Lv_4', 'Lv_5', 'Lv_6', 'Lv_7']
 
 # ── SQL: 전체 스핀 기본 통계 (spin_kpi_stat) ────────────────────────────────
+# launch_spin_date: D+61 이후 파이프라인이 날짜를 밀어서 기록하는 아티팩트 존재
+# → n_per_launch DESC, launch_spin_date ASC 로 가장 많이 기록된 (= shift 전) 날짜 선택
+# end_date: MAX(std_dt) = 실제 마지막 데이터 날짜
 SQL_SPIN_ALL = f"""
 SELECT
   CAST(spin_contents AS STRING) AS spin_id,
   spin_type,
-  CAST(launch_spin_date AS STRING) AS launch,
-  CAST(DATE_ADD(launch_spin_date, CAST(duration AS INT)) AS STRING) AS end_date,
-  CAST(std_dt AS STRING) AS last_std_dt,
-  CAST(duration AS INT) AS duration,
+  CAST(actual_launch AS STRING) AS launch,
+  CAST(max_std_dt AS STRING) AS end_date,
+  CAST(max_std_dt AS STRING) AS last_std_dt,
+  DATEDIFF(DATE(max_std_dt), DATE(actual_launch)) AS duration,
   CAST(total_user   AS BIGINT) AS total_user,
   CAST(total_amount AS BIGINT) AS total_uc,
   CAST(nbu_user     AS BIGINT) AS npu_user,
   CAST(nbu_amount   AS BIGINT) AS npu_uc,
   CAST(return_user  AS BIGINT) AS ret_user,
   CAST(return_amount AS BIGINT) AS ret_uc
-FROM pubgm_mart.spin_kpi_stat
-WHERE country = 'JP'
-  AND launch_spin_date >= ADD_MONTHS(CURRENT_DATE(), -36)
+FROM (
+  SELECT *,
+    MIN(std_dt) OVER (PARTITION BY spin_contents) AS actual_launch,
+    MAX(std_dt) OVER (PARTITION BY spin_contents) AS max_std_dt
+  FROM pubgm_mart.spin_kpi_stat
+  WHERE country = 'JP'
+    AND launch_spin_date >= ADD_MONTHS(CURRENT_DATE(), -36)
+)
 QUALIFY ROW_NUMBER() OVER (PARTITION BY spin_contents ORDER BY std_dt DESC) = 1
-ORDER BY launch_spin_date DESC
+ORDER BY actual_launch DESC
 """
 
 # ── SQL: 전체 상자 기본 통계 (crate_kpi_info) ──────────────────────────────
+# n_per_launch = (crate, launch_chest_date) 그룹별 row 수
+# 가장 row 수가 많은 launch_chest_date = 실제 판매 시작일 (D+61부터 파이프라인이 날짜를 밀어서 기록하는 아티팩트 제거)
 SQL_BOX_ALL = f"""
 SELECT
   crate AS box_id,
   CAST(launch_chest_date AS STRING) AS launch,
-  CAST(DATE_ADD(launch_chest_date, CAST(duration AS INT)) AS STRING) AS end_date,
+  CAST(max_std_dt AS STRING) AS end_date,
   CAST(std_dt AS STRING) AS last_std_dt,
-  CAST(duration AS INT) AS duration,
+  DATEDIFF(DATE(max_std_dt), launch_chest_date) AS duration,
   CAST(total_user   AS BIGINT) AS total_user,
   CAST(total_amount AS BIGINT) AS total_uc,
   CAST(nbu_user     AS BIGINT) AS npu_user,
   CAST(nbu_amount   AS BIGINT) AS npu_uc,
   CAST(return_user  AS BIGINT) AS ret_user,
   CAST(return_amount AS BIGINT) AS ret_uc
-FROM pubgm_mart.crate_kpi_info
-WHERE country = 'JP'
-  AND crate NOT LIKE '%KR'
-  AND launch_chest_date >= ADD_MONTHS(CURRENT_DATE(), -36)
-QUALIFY ROW_NUMBER() OVER (PARTITION BY crate ORDER BY std_dt DESC) = 1
+FROM (
+  SELECT *,
+    COUNT(*) OVER (PARTITION BY crate, launch_chest_date) AS n_per_launch,
+    MAX(std_dt) OVER (PARTITION BY crate) AS max_std_dt
+  FROM pubgm_mart.crate_kpi_info
+  WHERE country = 'JP'
+    AND crate NOT LIKE '%KR'
+    AND launch_chest_date >= ADD_MONTHS(CURRENT_DATE(), -36)
+)
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY crate
+  ORDER BY n_per_launch DESC, launch_chest_date ASC, std_dt DESC
+) = 1
 ORDER BY launch_chest_date DESC
 """
 
@@ -178,35 +203,49 @@ def _dn_union_all(id_col):
         )
     return '\n  UNION ALL\n  '.join(parts)
 
-def make_spin_level_sql(spin_ids, cutoff):
-    """판매기간/3m/1m × Total/D+0~D+60 one-pass 계산"""
-    ids_str = ','.join(str(i) for i in spin_ids)
-    lc = LEVEL_CASE
-    dn_cols    = _dn_buyer_cols()
-    dn_pass    = _dn_pass_cols()
-    dn_union   = _dn_union_all('spin_id')
+def make_spin_level_sql(spin_ids, cutoff, snap_dates=None, min_launch=None, max_eff_end=None):
+    """판매기간/3m/1m × Total/D+0~D+60 집계 — (spin_id, method, d_preset, pay_level, users, total_uc) 반환
+    레벨: purchasing_power_user 스냅샷 기반
+    snap_dates: 리터럴 날짜 집합 (Delta Lake 파티션 프루닝 최적화)
+    min_launch: 배치 내 최소 launch_spin_date — 파티션 프루닝 하한선
+    max_eff_end: 배치 내 최대 eff_end — 파티션 프루닝 상한선 (종료 상품은 cutoff보다 훨씬 이전)
+    """
+    ids_str    = ','.join(str(i) for i in spin_ids)
+    min_launch = min_launch or '2020-01-01'
+    max_eff_end = max_eff_end or cutoff
+    dn_cols  = _dn_buyer_cols()
+    dn_pass  = _dn_pass_cols()
+    dn_union = _dn_union_all('spin_id')
+    if snap_dates:
+        date_lit = ', '.join(f"DATE('{d}')" for d in sorted(snap_dates))
+        lv_date_filter = f"p.std_dt IN ({date_lit})"
+    else:
+        lv_date_filter = """p.std_dt IN (
+      SELECT DISTINCT launch_spin_date FROM spin_meta UNION ALL
+      SELECT DISTINCT prev3m_end       FROM spin_meta UNION ALL
+      SELECT DISTINCT prev1m_end       FROM spin_meta
+    )"""
     return f"""
 WITH spin_meta AS (
   SELECT
     CAST(spin_contents AS STRING) AS spin_id,
-    launch_spin_date,
-    LEAST(DATE_ADD(launch_spin_date, CAST(duration AS INT)), DATE('{cutoff}')) AS eff_end,
-    DATEDIFF(
-      LEAST(DATE_ADD(launch_spin_date, CAST(duration AS INT)), DATE('{cutoff}')),
-      launch_spin_date
-    ) + 1 AS period_days,
-    DATE_TRUNC('month', ADD_MONTHS(launch_spin_date, -3)) AS c3m_start,
-    LAST_DAY(ADD_MONTHS(launch_spin_date, -1))            AS prev1m_end,
-    DATE_TRUNC('month', ADD_MONTHS(launch_spin_date, -1)) AS prev1m_start
-  FROM pubgm_mart.spin_kpi_stat
-  WHERE country = 'JP' AND spin_contents IN ({ids_str})
+    DATE(actual_launch) AS launch_spin_date,
+    LEAST(DATE(max_std_dt), DATE('{cutoff}')) AS eff_end,
+    LAST_DAY(ADD_MONTHS(DATE(actual_launch), -3)) AS prev3m_end,
+    LAST_DAY(ADD_MONTHS(DATE(actual_launch), -1)) AS prev1m_end
+  FROM (
+    SELECT *,
+      MIN(std_dt) OVER (PARTITION BY spin_contents) AS actual_launch,
+      MAX(std_dt) OVER (PARTITION BY spin_contents) AS max_std_dt
+    FROM pubgm_mart.spin_kpi_stat
+    WHERE country = 'JP' AND spin_contents IN ({ids_str})
+  )
   QUALIFY ROW_NUMBER() OVER (PARTITION BY spin_contents ORDER BY std_dt DESC) = 1
 ),
 jp_users AS (
   SELECT DISTINCT CAST(vopenid AS STRING) AS vopenid
   FROM pubgm_mart.purchasing_power_user
-  WHERE country = 'JP'
-    AND std_dt >= DATE_ADD(DATE('{cutoff}'), -120)
+  WHERE country = 'JP' AND std_dt = DATE('{cutoff}')
 ),
 spin_txns AS (
   SELECT sm.spin_id, CAST(s.vopenid AS STRING) AS vopenid,
@@ -217,6 +256,9 @@ spin_txns AS (
     AND s.std_dt >= sm.launch_spin_date AND s.std_dt <= sm.eff_end
   JOIN jp_users ON CAST(s.vopenid AS STRING) = jp_users.vopenid
   WHERE s.addorreduce = 0
+    AND s.std_dt >= DATE('{min_launch}')
+    AND s.std_dt <= DATE('{max_eff_end}')
+    AND CAST(s.subreason AS BIGINT) IN ({ids_str})
 ),
 buyer_dn AS (
   SELECT spin_id, vopenid,
@@ -225,30 +267,28 @@ buyer_dn AS (
   FROM spin_txns
   GROUP BY spin_id, vopenid
 ),
-charge_data AS (
-  SELECT bd.spin_id, CAST(u.vopenid AS STRING) AS vopenid,
-    SUM(CASE WHEN u.date >= sm.launch_spin_date AND u.date <= sm.eff_end
-        THEN COALESCE(u.PaidChgAmount,0) ELSE 0 END)    AS period_charge,
-    sm.period_days,
-    SUM(CASE WHEN u.date >= sm.c3m_start AND u.date <= sm.prev1m_end
-        THEN COALESCE(u.PaidChgAmount,0) ELSE 0 END)    AS charge_3m,
-    SUM(CASE WHEN u.date >= sm.prev1m_start AND u.date <= sm.prev1m_end
-        THEN COALESCE(u.PaidChgAmount,0) ELSE 0 END)    AS charge_1m
-  FROM buyer_dn bd
-  JOIN spin_meta sm ON bd.spin_id = sm.spin_id
-  LEFT JOIN pubgm_mart.ucpurchase_individual u ON CAST(u.vopenid AS STRING) = bd.vopenid
-    AND u.date >= sm.c3m_start AND u.date <= sm.eff_end
-  GROUP BY bd.spin_id, u.vopenid, sm.period_days, sm.launch_spin_date, sm.eff_end,
-           sm.c3m_start, sm.prev1m_end, sm.prev1m_start
+buyers AS (
+  SELECT DISTINCT vopenid FROM buyer_dn
+),
+lv_snap AS (
+  SELECT CAST(p.vopenid AS STRING) AS vopenid, p.std_dt,
+    COALESCE(p.pay_amt_duringLast30days_tag, 'Non-Paid') AS lv
+  FROM pubgm_mart.purchasing_power_user p
+  LEFT SEMI JOIN buyers b ON CAST(p.vopenid AS STRING) = b.vopenid
+  WHERE p.country = 'JP'
+    AND {lv_date_filter}
 ),
 classified AS (
   SELECT bd.spin_id, bd.vopenid, bd.first_day,
     {dn_pass},
-    {lc.replace('avg_uc', 'COALESCE(cd.period_charge,0)/NULLIF(cd.period_days,0)*30')} AS lv_period,
-    {lc.replace('avg_uc', 'COALESCE(cd.charge_3m,0)/3.0')}                             AS lv_3m,
-    {lc.replace('avg_uc', 'COALESCE(cd.charge_1m,0)')}                                 AS lv_1m
+    COALESCE(lp.lv, 'Non-Paid') AS lv_period,
+    COALESCE(l3.lv, 'Non-Paid') AS lv_3m,
+    COALESCE(l1.lv, 'Non-Paid') AS lv_1m
   FROM buyer_dn bd
-  LEFT JOIN charge_data cd ON bd.spin_id = cd.spin_id AND bd.vopenid = cd.vopenid
+  JOIN spin_meta sm ON bd.spin_id = sm.spin_id
+  LEFT JOIN lv_snap lp ON bd.vopenid = lp.vopenid AND lp.std_dt = sm.launch_spin_date
+  LEFT JOIN lv_snap l3 ON bd.vopenid = l3.vopenid AND l3.std_dt = sm.prev3m_end
+  LEFT JOIN lv_snap l1 ON bd.vopenid = l1.vopenid AND l1.std_dt = sm.prev1m_end
 ),
 combos AS (
   SELECT spin_id, vopenid, first_day, 'period' AS method, lv_period AS pay_level, {dn_pass} FROM classified
@@ -258,7 +298,7 @@ combos AS (
   SELECT spin_id, vopenid, first_day, '1m',    lv_1m,     {dn_pass} FROM classified
 )
 SELECT spin_id, method, d_preset, pay_level,
-  COUNT(DISTINCT vopenid) AS users,
+  COUNT(*) AS users,
   CAST(SUM(uc_val) AS BIGINT) AS total_uc
 FROM (
   {dn_union}
@@ -267,85 +307,115 @@ GROUP BY spin_id, method, d_preset, pay_level
 ORDER BY spin_id, method, d_preset, pay_level
 """
 
-def make_box_level_sql(box_ids, cutoff):
-    """판매기간/3m/1m × Total/D+0~D+60 one-pass 계산"""
-    ids_str = ','.join("'" + b.replace("'", "''") + "'" for b in box_ids)
-    lc = LEVEL_CASE
-    dn_cols  = _dn_buyer_cols()
-    dn_pass  = _dn_pass_cols()
-    dn_union = _dn_union_all('box_id')
+def make_box_level_sql(box_ids, cutoff, snap_dates=None, min_launch=None, max_eff_end=None):
+    """판매기간/3m/1m × Total/D+0~D+60 집계 — (box_id, method, d_preset, pay_level, users, total_uc) 반환
+    최적화:
+    - box_txns(user_use_uc_info) 3회 스캔 (기존 63회 → method UNION ALL 3회만)
+    - buyer_dn에서 D+0~D+60 누적합을 ARRAY로 패킹
+    - LATERAL VIEW EXPLODE(SEQUENCE(-1,60))로 d_preset 확장 (UNION ALL 63개 제거)
+    - 최종 결과: ~1,488 rows/box — raw user rows 전송 없음
+    """
+    ids_str     = ','.join("'" + b.replace("'", "''") + "'" for b in box_ids)
+    min_launch  = min_launch or '2020-01-01'
+    max_eff_end = max_eff_end or cutoff
+    dn_cols     = ',\n'.join(
+        f'    SUM(CASE WHEN day_n <= {n} THEN uc_day ELSE 0 END) AS c{n}'
+        for n in range(61)
+    )
+    cum_array   = 'ARRAY(' + ', '.join(f'c{n}' for n in range(61)) + ')'
+    if snap_dates:
+        date_lit = ', '.join(f"DATE('{d}')" for d in sorted(snap_dates))
+        lv_date_filter = f"p.std_dt IN ({date_lit})"
+    else:
+        lv_date_filter = """p.std_dt IN (
+      SELECT DISTINCT launch_chest_date FROM box_meta UNION ALL
+      SELECT DISTINCT prev3m_end        FROM box_meta UNION ALL
+      SELECT DISTINCT prev1m_end        FROM box_meta
+    )"""
     return f"""
 WITH box_meta AS (
   SELECT
     crate AS box_id,
     launch_chest_date,
-    LEAST(DATE_ADD(launch_chest_date, CAST(duration AS INT)), DATE('{cutoff}')) AS eff_end,
-    DATEDIFF(
-      LEAST(DATE_ADD(launch_chest_date, CAST(duration AS INT)), DATE('{cutoff}')),
-      launch_chest_date
-    ) + 1 AS period_days,
-    DATE_TRUNC('month', ADD_MONTHS(launch_chest_date, -3)) AS c3m_start,
-    LAST_DAY(ADD_MONTHS(launch_chest_date, -1))            AS prev1m_end,
-    DATE_TRUNC('month', ADD_MONTHS(launch_chest_date, -1)) AS prev1m_start
-  FROM pubgm_mart.crate_kpi_info
-  WHERE country = 'JP'
-    AND crate IN ({ids_str})
-  QUALIFY ROW_NUMBER() OVER (PARTITION BY crate ORDER BY std_dt DESC) = 1
+    LEAST(DATE(max_std_dt), DATE('{cutoff}'))   AS eff_end,
+    LAST_DAY(ADD_MONTHS(launch_chest_date, -3)) AS prev3m_end,
+    LAST_DAY(ADD_MONTHS(launch_chest_date, -1)) AS prev1m_end
+  FROM (
+    SELECT *,
+      COUNT(*) OVER (PARTITION BY crate, launch_chest_date) AS n_per_launch,
+      MAX(std_dt) OVER (PARTITION BY crate) AS max_std_dt
+    FROM pubgm_mart.crate_kpi_info
+    WHERE country = 'JP' AND crate IN ({ids_str})
+  )
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY crate
+    ORDER BY n_per_launch DESC, launch_chest_date ASC, std_dt DESC
+  ) = 1
+),
+jp_users AS (
+  SELECT DISTINCT CAST(vopenid AS STRING) AS vopenid
+  FROM pubgm_mart.purchasing_power_user
+  WHERE country = 'JP' AND std_dt = DATE('{cutoff}')
 ),
 box_txns AS (
   SELECT bm.box_id, CAST(u.vopenid AS STRING) AS vopenid,
     DATEDIFF(u.std_dt, bm.launch_chest_date) AS day_n,
-    CAST(u.amount AS BIGINT) AS uc_used
+    SUM(CAST(u.amount AS BIGINT)) AS uc_day
   FROM pubgm_mart.user_use_uc_info u
   JOIN box_meta bm ON u.product = bm.box_id
     AND u.std_dt >= bm.launch_chest_date AND u.std_dt <= bm.eff_end
+  JOIN jp_users ON CAST(u.vopenid AS STRING) = jp_users.vopenid
   WHERE u.country = 'JP'
+    AND u.std_dt >= DATE('{min_launch}')
+    AND u.std_dt <= DATE('{max_eff_end}')
+  GROUP BY bm.box_id, CAST(u.vopenid AS STRING), DATEDIFF(u.std_dt, bm.launch_chest_date)
 ),
 buyer_dn AS (
   SELECT box_id, vopenid,
     MIN(day_n) AS first_day,
+    SUM(uc_day) AS uc_total,
 {dn_cols}
   FROM box_txns
   GROUP BY box_id, vopenid
 ),
-charge_data AS (
-  SELECT bd.box_id, CAST(u.vopenid AS STRING) AS vopenid,
-    SUM(CASE WHEN u.date >= bm.launch_chest_date AND u.date <= bm.eff_end
-        THEN COALESCE(u.PaidChgAmount, 0) ELSE 0 END)   AS period_charge,
-    bm.period_days,
-    SUM(CASE WHEN u.date >= bm.c3m_start AND u.date <= bm.prev1m_end
-        THEN COALESCE(u.PaidChgAmount, 0) ELSE 0 END)   AS charge_3m,
-    SUM(CASE WHEN u.date >= bm.prev1m_start AND u.date <= bm.prev1m_end
-        THEN COALESCE(u.PaidChgAmount, 0) ELSE 0 END)   AS charge_1m
-  FROM buyer_dn bd
-  JOIN box_meta bm ON bd.box_id = bm.box_id
-  LEFT JOIN pubgm_mart.ucpurchase_individual u ON CAST(u.vopenid AS STRING) = bd.vopenid
-    AND u.date >= bm.c3m_start AND u.date <= bm.eff_end
-  GROUP BY bd.box_id, u.vopenid, bm.period_days, bm.launch_chest_date, bm.eff_end,
-           bm.c3m_start, bm.prev1m_end, bm.prev1m_start
+buyers AS (
+  SELECT DISTINCT vopenid FROM buyer_dn
+),
+lv_snap AS (
+  SELECT CAST(p.vopenid AS STRING) AS vopenid, p.std_dt,
+    COALESCE(p.pay_amt_duringLast30days_tag, 'Non-Paid') AS lv
+  FROM pubgm_mart.purchasing_power_user p
+  LEFT SEMI JOIN buyers b ON CAST(p.vopenid AS STRING) = b.vopenid
+  WHERE p.country = 'JP'
+    AND {lv_date_filter}
 ),
 classified AS (
-  SELECT bd.box_id, bd.vopenid, bd.first_day,
-    {dn_pass},
-    {lc.replace('avg_uc', 'COALESCE(cd.period_charge,0)/NULLIF(cd.period_days,0)*30')} AS lv_period,
-    {lc.replace('avg_uc', 'COALESCE(cd.charge_3m,0)/3.0')}                             AS lv_3m,
-    {lc.replace('avg_uc', 'COALESCE(cd.charge_1m,0)')}                                 AS lv_1m
+  SELECT bd.box_id, bd.vopenid, bd.first_day, bd.uc_total,
+    {cum_array} AS cum_uc,
+    COALESCE(lp.lv, 'Non-Paid') AS lv_period,
+    COALESCE(l3.lv, 'Non-Paid') AS lv_3m,
+    COALESCE(l1.lv, 'Non-Paid') AS lv_1m
   FROM buyer_dn bd
-  LEFT JOIN charge_data cd ON bd.box_id = cd.box_id AND bd.vopenid = cd.vopenid
+  JOIN box_meta bm ON bd.box_id = bm.box_id
+  LEFT JOIN lv_snap lp ON bd.vopenid = lp.vopenid AND lp.std_dt = bm.launch_chest_date
+  LEFT JOIN lv_snap l3 ON bd.vopenid = l3.vopenid AND l3.std_dt = bm.prev3m_end
+  LEFT JOIN lv_snap l1 ON bd.vopenid = l1.vopenid AND l1.std_dt = bm.prev1m_end
 ),
 combos AS (
-  SELECT box_id, vopenid, first_day, 'period' AS method, lv_period AS pay_level, {dn_pass} FROM classified
+  SELECT box_id, vopenid, first_day, uc_total, cum_uc, 'period' AS method, lv_period AS pay_level FROM classified
   UNION ALL
-  SELECT box_id, vopenid, first_day, '3m',    lv_3m,     {dn_pass} FROM classified
+  SELECT box_id, vopenid, first_day, uc_total, cum_uc, '3m',    lv_3m                            FROM classified
   UNION ALL
-  SELECT box_id, vopenid, first_day, '1m',    lv_1m,     {dn_pass} FROM classified
+  SELECT box_id, vopenid, first_day, uc_total, cum_uc, '1m',    lv_1m                            FROM classified
 )
-SELECT box_id, method, d_preset, pay_level,
-  COUNT(DISTINCT vopenid) AS users,
-  CAST(SUM(uc_val) AS BIGINT) AS total_uc
-FROM (
-  {dn_union}
-)
+SELECT box_id, method,
+  CASE WHEN d_n = -1 THEN 'total' ELSE CAST(d_n AS STRING) END AS d_preset,
+  pay_level,
+  COUNT(*) AS users,
+  CAST(SUM(CASE WHEN d_n = -1 THEN uc_total ELSE cum_uc[d_n] END) AS BIGINT) AS total_uc
+FROM combos
+LATERAL VIEW EXPLODE(SEQUENCE(-1, 60)) t AS d_n
+WHERE d_n = -1 OR first_day <= d_n
 GROUP BY box_id, method, d_preset, pay_level
 ORDER BY box_id, method, d_preset, pay_level
 """
@@ -406,50 +476,131 @@ def build_level_map(rows, id_key='spin_id'):
         }
     return result
 
+def build_level_from_raw_rows(rows, id_key='box_id'):
+    """raw level rows → {id: {method: {d_preset: {pay_level: {'u':..,'uc':..}}}}}
+    Input: [{'<id_key>','vopenid','day_n','uc_day','lv_period','lv_3m','lv_1m'}, ...]
+    spin/box 공용. D+n 집계는 Python에서 처리 (SQL 62컬럼 + ucpurchase_individual 제거)
+    """
+    buyers = {}
+    for r in rows:
+        bid  = r[id_key]
+        vid  = r['vopenid']
+        dn   = int(r['day_n'] or 0)
+        uc   = int(r['uc_day'] or 0)
+        key  = (bid, vid)
+        if key not in buyers:
+            buyers[key] = {
+                'days': {},
+                'lvs': (r['lv_period'] or 'Non-Paid',
+                        r['lv_3m']    or 'Non-Paid',
+                        r['lv_1m']    or 'Non-Paid')
+            }
+        buyers[key]['days'][dn] = buyers[key]['days'].get(dn, 0) + uc
+
+    result = {}
+    for (bid, vid), info in buyers.items():
+        if bid not in result:
+            result[bid] = {}
+
+        days      = info['days']
+        lv_period, lv_3m, lv_1m = info['lvs']
+        first_day = min(days.keys()) if days else 0
+        uc_total  = sum(days.values())
+
+        # cumulative UC: cum[n] = sum of uc for day_n in [0..n]
+        cum = [0] * 61
+        running = 0
+        for n in range(61):
+            running += days.get(n, 0)
+            cum[n] = running
+
+        for method, lv in (('period', lv_period), ('3m', lv_3m), ('1m', lv_1m)):
+            if method not in result[bid]:
+                result[bid][method] = {}
+            m = result[bid][method]
+
+            # total (all days)
+            if 'total' not in m:
+                m['total'] = {}
+            entry = m['total'].setdefault(lv, {'u': 0, 'uc': 0})
+            entry['u']  += 1
+            entry['uc'] += uc_total
+
+            # D+n: buyer must have bought by day n
+            for n in range(61):
+                if first_day <= n:
+                    dp = str(n)
+                    if dp not in m:
+                        m[dp] = {}
+                    entry = m[dp].setdefault(lv, {'u': 0, 'uc': 0})
+                    entry['u']  += 1
+                    entry['uc'] += cum[n]
+
+    return result
+
+
 def make_spin_npu_sql(spin_ids, cutoff):
-    """spin_kpi_stat에서 D+n별 nbu_user/return_user 쿼리"""
+    """spin_kpi_stat에서 D+n별 nbu_user/return_user 쿼리 (실제 launch_spin_date 기준)"""
     ids_str = ','.join(str(i) for i in spin_ids)
     return f"""
+WITH real_launch AS (
+  SELECT spin_contents, MIN(std_dt) AS launch_spin_date
+  FROM pubgm_mart.spin_kpi_stat
+  WHERE country = 'JP' AND spin_contents IN ({ids_str})
+  GROUP BY spin_contents
+)
 SELECT
-  CAST(spin_contents AS STRING) AS spin_id,
-  DATEDIFF(std_dt, launch_spin_date) AS d_preset,
-  CAST(nbu_user AS BIGINT) AS npu_u,
-  CAST(nbu_amount AS BIGINT) AS npu_uc,
-  CAST(return_user AS BIGINT) AS ret_u,
-  CAST(return_amount AS BIGINT) AS ret_uc
-FROM pubgm_mart.spin_kpi_stat
-WHERE country = 'JP'
-  AND spin_contents IN ({ids_str})
-  AND launch_spin_date >= ADD_MONTHS(CURRENT_DATE(), -36)
-  AND std_dt <= DATE('{cutoff}')
-  AND DATEDIFF(std_dt, launch_spin_date) BETWEEN 0 AND 60
+  CAST(k.spin_contents AS STRING) AS spin_id,
+  DATEDIFF(k.std_dt, rl.launch_spin_date) AS d_preset,
+  CAST(k.nbu_user AS BIGINT) AS npu_u,
+  CAST(k.nbu_amount AS BIGINT) AS npu_uc,
+  CAST(k.return_user AS BIGINT) AS ret_u,
+  CAST(k.return_amount AS BIGINT) AS ret_uc
+FROM pubgm_mart.spin_kpi_stat k
+JOIN real_launch rl ON k.spin_contents = rl.spin_contents AND k.launch_spin_date = rl.launch_spin_date
+WHERE k.country = 'JP'
+  AND k.spin_contents IN ({ids_str})
+  AND k.std_dt <= DATE('{cutoff}')
+  AND DATEDIFF(k.std_dt, rl.launch_spin_date) BETWEEN 0 AND 60
 QUALIFY ROW_NUMBER() OVER (
-  PARTITION BY spin_contents, DATEDIFF(std_dt, launch_spin_date)
-  ORDER BY std_dt DESC
+  PARTITION BY k.spin_contents, DATEDIFF(k.std_dt, rl.launch_spin_date)
+  ORDER BY k.std_dt DESC
 ) = 1
 ORDER BY spin_id, d_preset
 """
 
 def make_box_npu_sql(box_ids, cutoff):
-    """crate_kpi_info에서 D+n별 nbu_user/return_user 쿼리"""
+    """crate_kpi_info에서 D+n별 nbu_user/return_user 쿼리 (실제 launch_chest_date 기준)"""
     ids_str = ','.join("'" + b.replace("'", "''") + "'" for b in box_ids)
     return f"""
+WITH real_launch AS (
+  SELECT crate, launch_chest_date
+  FROM (
+    SELECT crate, launch_chest_date,
+      COUNT(*) OVER (PARTITION BY crate, launch_chest_date) AS n_per_launch
+    FROM pubgm_mart.crate_kpi_info
+    WHERE country = 'JP' AND crate IN ({ids_str})
+  )
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY crate ORDER BY n_per_launch DESC, launch_chest_date ASC
+  ) = 1
+)
 SELECT
-  crate AS box_id,
-  DATEDIFF(std_dt, launch_chest_date) AS d_preset,
-  CAST(nbu_user AS BIGINT) AS npu_u,
-  CAST(nbu_amount AS BIGINT) AS npu_uc,
-  CAST(return_user AS BIGINT) AS ret_u,
-  CAST(return_amount AS BIGINT) AS ret_uc
-FROM pubgm_mart.crate_kpi_info
-WHERE country = 'JP'
-  AND crate IN ({ids_str})
-  AND launch_chest_date >= ADD_MONTHS(CURRENT_DATE(), -36)
-  AND std_dt <= DATE('{cutoff}')
-  AND DATEDIFF(std_dt, launch_chest_date) BETWEEN 0 AND 60
+  k.crate AS box_id,
+  DATEDIFF(k.std_dt, rl.launch_chest_date) AS d_preset,
+  CAST(k.nbu_user AS BIGINT) AS npu_u,
+  CAST(k.nbu_amount AS BIGINT) AS npu_uc,
+  CAST(k.return_user AS BIGINT) AS ret_u,
+  CAST(k.return_amount AS BIGINT) AS ret_uc
+FROM pubgm_mart.crate_kpi_info k
+JOIN real_launch rl ON k.crate = rl.crate AND k.launch_chest_date = rl.launch_chest_date
+WHERE k.country = 'JP'
+  AND k.crate IN ({ids_str})
+  AND k.std_dt <= DATE('{cutoff}')
+  AND DATEDIFF(k.std_dt, rl.launch_chest_date) BETWEEN 0 AND 60
 QUALIFY ROW_NUMBER() OVER (
-  PARTITION BY crate, DATEDIFF(std_dt, launch_chest_date)
-  ORDER BY std_dt DESC
+  PARTITION BY k.crate, DATEDIFF(k.std_dt, rl.launch_chest_date)
+  ORDER BY k.std_dt DESC
 ) = 1
 ORDER BY box_id, d_preset
 """
@@ -468,6 +619,28 @@ def build_npu_map(rows, id_key='spin_id'):
 
 ACTIVE_THRESHOLD = (date.today() - timedelta(days=3)).isoformat()
 
+def _month_end(y, m):
+    """월 말일 반환"""
+    if m == 12: return date(y, 12, 31)
+    return date(y, m + 1, 1) - timedelta(days=1)
+
+def _prev_month_end(d, months_before):
+    """d 기준 months_before 개월 전 월 말일"""
+    m, y = d.month - months_before, d.year
+    while m <= 0: m += 12; y -= 1
+    return _month_end(y, m)
+
+def _snap_dates_for_launches(launch_dates):
+    """launch_dates(str or date iterable) → {period, 3m, 1m} 스냅샷 날짜 집합 (리터럴 최적화)"""
+    dates = set()
+    for ld in launch_dates:
+        d = date.fromisoformat(str(ld)[:10]) if ld else None
+        if not d: continue
+        dates.add(d.isoformat())
+        dates.add(_prev_month_end(d, 3).isoformat())
+        dates.add(_prev_month_end(d, 1).isoformat())
+    return dates
+
 def is_active(last_std_dt_str):
     """spin_kpi_stat std_dt(최신 데이터 날짜)가 3일 이내면 판매 중으로 판단
     (데이터 2일 지연 + 1일 여유)"""
@@ -479,6 +652,14 @@ def is_active(last_std_dt_str):
 def main():
     # --quick: 기본 통계만 뽑고 HTML 생성 (레벨 쿼리 스킵, 구조 확인용)
     quick = '--quick' in sys.argv
+    boxes_only = '--boxes-only' in sys.argv
+
+    def int_arg(name, default):
+        prefix = f'--{name}='
+        for arg in sys.argv:
+            if arg.startswith(prefix):
+                return int(arg.split('=', 1)[1])
+        return int(os.environ.get(name.upper().replace('-', '_'), default))
 
     token = get_token()
     if not token:
@@ -513,19 +694,32 @@ def main():
         print(f"Active spins: {len(active_spin_ids)}, New completed spins: {len(done_spin_ids)}")
         print(f"Active boxes: {len(active_box_ids)}, New completed boxes: {len(done_box_ids)}")
 
-        BATCH = 80  # 25MB inline 제한 대응
+        SPIN_BATCH = int_arg('spin-batch', 20)  # spin: 배치당 날짜범위 최소화로 파티션 프루닝 효율 향상
+        BOX_BATCH  = int_arg('box-batch', 20)   # box: user_use_uc_info + purchasing_power_user 스냅샷
 
-        query_spin_ids = active_spin_ids + done_spin_ids
+        spin_launch   = {r['spin_id']: r.get('launch') for r in raw_spins}
+        spin_eff_end  = {r['spin_id']: min(str(r['end_date']), DATA_CUTOFF) if r.get('end_date') else DATA_CUTOFF for r in raw_spins}
+        box_launch    = {r['box_id']:  r.get('launch') for r in raw_boxes}
+        box_eff_end   = {r['box_id']:  min(str(r['end_date']), DATA_CUTOFF) if r.get('end_date') else DATA_CUTOFF for r in raw_boxes}
+
+        query_spin_ids = [] if boxes_only else active_spin_ids + done_spin_ids
+        if boxes_only:
+            print("--boxes-only mode: using cached spin level/NPU data")
         if query_spin_ids:
             print(f"Querying spin pay level ({len(query_spin_ids)} products)...")
             all_spin_ids_set = set(done_spin_ids + active_spin_ids)
-            for i in range(0, len(query_spin_ids), BATCH):
-                batch = query_spin_ids[i:i+BATCH]
-                print(f"  spin batch {i//BATCH+1}/{(len(query_spin_ids)-1)//BATCH+1} ({len(batch)} products)")
-                rows = run_query(token, make_spin_level_sql(batch, DATA_CUTOFF), f'spin_level_b{i//BATCH+1}')
+            for i in range(0, len(query_spin_ids), SPIN_BATCH):
+                batch = query_spin_ids[i:i+SPIN_BATCH]
+                print(f"  spin batch {i//SPIN_BATCH+1}/{(len(query_spin_ids)-1)//SPIN_BATCH+1} ({len(batch)} products)")
+                snap_dates = _snap_dates_for_launches(spin_launch.get(s) for s in batch)
+                batch_spin_launches = [spin_launch.get(s) for s in batch if spin_launch.get(s)]
+                min_launch = min(batch_spin_launches) if batch_spin_launches else DATA_CUTOFF
+                batch_spin_eff_ends = [spin_eff_end.get(s) for s in batch if spin_eff_end.get(s)]
+                max_eff_end = max(batch_spin_eff_ends) if batch_spin_eff_ends else DATA_CUTOFF
+                rows = run_query(token, make_spin_level_sql(batch, DATA_CUTOFF, snap_dates, min_launch, max_eff_end), f'spin_level_b{i//SPIN_BATCH+1}')
                 batch_lv = build_level_map(rows, 'spin_id')
                 spin_level.update(batch_lv)
-                npu_rows = run_query(token, make_spin_npu_sql(batch, DATA_CUTOFF), f'spin_npu_b{i//BATCH+1}')
+                npu_rows = run_query(token, make_spin_npu_sql(batch, DATA_CUTOFF), f'spin_npu_b{i//SPIN_BATCH+1}')
                 batch_npu = build_npu_map(npu_rows, 'spin_id')
                 spin_npu.update(batch_npu)
                 for sid in batch:
@@ -541,13 +735,18 @@ def main():
         if query_box_ids:
             print(f"Querying box pay level ({len(query_box_ids)} products)...")
             all_box_ids_set = set(done_box_ids + active_box_ids)
-            for i in range(0, len(query_box_ids), BATCH):
-                batch = query_box_ids[i:i+BATCH]
-                print(f"  box batch {i//BATCH+1}/{(len(query_box_ids)-1)//BATCH+1} ({len(batch)} products)")
-                rows = run_query(token, make_box_level_sql(batch, DATA_CUTOFF), f'box_level_b{i//BATCH+1}')
+            for i in range(0, len(query_box_ids), BOX_BATCH):
+                batch = query_box_ids[i:i+BOX_BATCH]
+                print(f"  box batch {i//BOX_BATCH+1}/{(len(query_box_ids)-1)//BOX_BATCH+1} ({len(batch)} products)")
+                snap_dates = _snap_dates_for_launches(box_launch.get(b) for b in batch)
+                batch_launches = [box_launch.get(b) for b in batch if box_launch.get(b)]
+                min_launch = min(batch_launches) if batch_launches else DATA_CUTOFF
+                batch_box_eff_ends = [box_eff_end.get(b) for b in batch if box_eff_end.get(b)]
+                max_eff_end = max(batch_box_eff_ends) if batch_box_eff_ends else DATA_CUTOFF
+                rows = run_query(token, make_box_level_sql(batch, DATA_CUTOFF, snap_dates, min_launch, max_eff_end), f'box_level_b{i//BOX_BATCH+1}')
                 batch_lv = build_level_map(rows, 'box_id')
                 box_level.update(batch_lv)
-                npu_rows = run_query(token, make_box_npu_sql(batch, DATA_CUTOFF), f'box_npu_b{i//BATCH+1}')
+                npu_rows = run_query(token, make_box_npu_sql(batch, DATA_CUTOFF), f'box_npu_b{i//BOX_BATCH+1}')
                 batch_npu = build_npu_map(npu_rows, 'box_id')
                 box_npu.update(batch_npu)
                 for bid in batch:
@@ -593,7 +792,10 @@ def main():
         d = make_basic(r, 'spin_id')
         d['name'] = SPIN_NAME_OVERRIDES.get(sid, spin_names.get(sid, sid))
         d['spin_type'] = r.get('spin_type', '')
-        d['vtuber'] = int(sid) in VTUBER_SPIN_IDS if sid.isdigit() else False
+        d['vtuber']      = int(sid) in VTUBER_SPIN_IDS if sid.isdigit() else False
+        d['cat_xsuit']   = sid.endswith('236002')
+        d['cat_gilt']    = sid.endswith('073013') or sid.endswith('073014')
+        d['cat_sportcar'] = False
         d['level'] = spin_level.get(sid, {})
         d['npu_dn'] = spin_npu.get(sid, {}).get('npu_dn', {})
         d['ret_dn'] = spin_npu.get(sid, {}).get('ret_dn', {})
@@ -604,7 +806,10 @@ def main():
         bid = r['box_id']
         d = make_basic(r, 'box_id')
         d['name'] = BOX_NAME_OVERRIDES.get(bid, bid)
-        d['vtuber'] = bid in VTUBER_BOX_NAMES
+        d['vtuber']      = bid in VTUBER_BOX_NAMES
+        d['cat_xsuit']   = False
+        d['cat_gilt']    = False
+        d['cat_sportcar'] = bid.startswith('跑车宝箱')
         d['level'] = box_level.get(bid, {})
         d['npu_dn'] = box_npu.get(bid, {}).get('npu_dn', {})
         d['ret_dn'] = box_npu.get(bid, {}).get('ret_dn', {})
