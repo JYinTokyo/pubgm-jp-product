@@ -130,6 +130,7 @@ BOX_NAME_OVERRIDES = {
     'Code Geass 2 宝箱_JP':                   'Code Geass 2',
     'SPY XFAMILY Event Crate_JP':             'SPY XFAMILY',
     'MUMMY宝箱_JP':                            'MUMMY',
+    'Opanchu Usagi 宝箱_KR':                  'Opanchu Usagi',
 }
 
 # ── 과금 레벨 분류 CASE 식 ───────────────────────────────────────────────────
@@ -198,7 +199,7 @@ FROM (
     MAX(std_dt) OVER (PARTITION BY crate) AS max_std_dt
   FROM pubgm_mart.crate_kpi_info
   WHERE country = 'JP'
-    AND crate NOT LIKE '%KR'
+    AND (crate NOT LIKE '%KR' OR crate = 'Opanchu Usagi 宝箱_KR')
     AND launch_chest_date >= ADD_MONTHS(CURRENT_DATE(), -36)
 )
 QUALIFY ROW_NUMBER() OVER (
