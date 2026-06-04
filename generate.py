@@ -88,6 +88,19 @@ VTUBER_SPIN_IDS = {230073002, 230073003, 234073031, 235073032, 236073031,
 VTUBER_BOX_NAMES = {'Salome 宝箱_JP', 'UC_Change_reason3029', 'Nakiri Ayame 宝箱',
                     '440 Usada Pekora CRATE_JP'}
 
+# ── アニメ 상품 목록 ─────────────────────────────────────────────────────────
+ANIME_SPIN_IDS = {238073024, 238073025, 240073031, 241073031, 241073033}
+ANIME_BOX_NAMES = {
+    'SAKAMOTO DAYS 宝箱', 'Kaiju No. 8 CRATE', 'Levi Crate', 'Tensura Crate',
+    'Frieren:Beyond Journey\'s End宝箱_JP',
+    'Code Geass 1 宝箱_JP', 'Code Geass 2 宝箱_JP',
+    '龙珠宝箱1', '龙珠宝箱2', '龙珠宝箱320JP',
+    'SPY XFAMILY Event Crate_JP',
+}
+
+# ── MUMMY 상품 목록 ──────────────────────────────────────────────────────────
+MUMMY_BOX_NAMES = {'MUMMY宝箱_JP', '3.9冰木乃伊宝箱', '烈焰古神宝箱(3.2木乃伊宝箱)'}
+
 # ── 표시 명칭 오버라이드 ────────────────────────────────────────────────────
 SPIN_NAME_OVERRIDES = {
     '230073002': 'Usada Pekora 1-1',
@@ -97,12 +110,26 @@ SPIN_NAME_OVERRIDES = {
     '238073031': 'Pmarusama 2',
     '238073032': 'Sakura Miko',
     '240073032': 'Houshou Marine',
+    '238073024': 'Attack on Titan-Eren',
+    '238073025': 'Attack on Titan-Armin',
+    '240073031': 'TokyoRevengers',
+    '241073031': 'DAN DA DAN',
+    '241073033': 'Kaiju No.8 Spin',
 }
 BOX_NAME_OVERRIDES = {
-    '440 Usada Pekora CRATE_JP': 'Usada Pekora 2',
-    'Nakiri Ayame 宝箱':          'Nakiri Ayame',
-    'Salome 宝箱_JP':             'Salome',
-    'UC_Change_reason3029':       'Kanae & Kuzuha',
+    '440 Usada Pekora CRATE_JP':              'Usada Pekora 2',
+    'Nakiri Ayame 宝箱':                       'Nakiri Ayame',
+    'Salome 宝箱_JP':                          'Salome',
+    'UC_Change_reason3029':                   'Kanae & Kuzuha',
+    'Frieren:Beyond Journey\'s End宝箱_JP':    'Frieren',
+    'SAKAMOTO DAYS 宝箱':                      'SAKAMOTO DAYS',
+    'Kaiju No. 8 CRATE':                      'Kaiju No.8 Crate',
+    'Levi Crate':                             'Attack on Titan-Levi',
+    'Tensura Crate':                          'Tensura',
+    'Code Geass 1 宝箱_JP':                   'Code Geass 1',
+    'Code Geass 2 宝箱_JP':                   'Code Geass 2',
+    'SPY XFAMILY Event Crate_JP':             'SPY XFAMILY',
+    'MUMMY宝箱_JP':                            'MUMMY',
 }
 
 # ── 과금 레벨 분류 CASE 식 ───────────────────────────────────────────────────
@@ -315,7 +342,12 @@ def make_box_level_sql(box_ids, cutoff, snap_dates=None, min_launch=None, max_ef
     - LATERAL VIEW EXPLODE(SEQUENCE(-1,60))로 d_preset 확장 (UNION ALL 63개 제거)
     - 최종 결과: ~1,488 rows/box — raw user rows 전송 없음
     """
-    ids_str     = ','.join("'" + b.replace("'", "''") + "'" for b in box_ids)
+    def _sql_str(s):
+        if "'" not in s:
+            return f"'{s}'"
+        parts = s.split("'")
+        return "CONCAT(" + ",char(39),".join(f"'{p}'" for p in parts) + ")"
+    ids_str     = ','.join(_sql_str(b) for b in box_ids)
     min_launch  = min_launch or '2020-01-01'
     max_eff_end = max_eff_end or cutoff
     dn_cols     = ',\n'.join(
@@ -571,7 +603,12 @@ ORDER BY spin_id, d_preset
 
 def make_box_npu_sql(box_ids, cutoff):
     """crate_kpi_info에서 D+n별 nbu_user/return_user 쿼리 (실제 launch_chest_date 기준)"""
-    ids_str = ','.join("'" + b.replace("'", "''") + "'" for b in box_ids)
+    def _sql_str(s):
+        if "'" not in s:
+            return f"'{s}'"
+        parts = s.split("'")
+        return "CONCAT(" + ",char(39),".join(f"'{p}'" for p in parts) + ")"
+    ids_str = ','.join(_sql_str(b) for b in box_ids)
     return f"""
 WITH real_launch AS (
   SELECT crate, launch_chest_date
@@ -792,10 +829,12 @@ def main():
         d = make_basic(r, 'spin_id')
         d['name'] = SPIN_NAME_OVERRIDES.get(sid, spin_names.get(sid, sid))
         d['spin_type'] = r.get('spin_type', '')
-        d['vtuber']      = int(sid) in VTUBER_SPIN_IDS if sid.isdigit() else False
-        d['cat_xsuit']   = sid.endswith('236002')
-        d['cat_gilt']    = sid.endswith('073013') or sid.endswith('073014')
+        d['vtuber']       = int(sid) in VTUBER_SPIN_IDS if sid.isdigit() else False
+        d['cat_anime']    = int(sid) in ANIME_SPIN_IDS if sid.isdigit() else False
+        d['cat_xsuit']    = sid.endswith('236002')
+        d['cat_gilt']     = sid.endswith('073013') or sid.endswith('073014')
         d['cat_sportcar'] = False
+        d['cat_mummy']    = False
         d['level'] = spin_level.get(sid, {})
         d['npu_dn'] = spin_npu.get(sid, {}).get('npu_dn', {})
         d['ret_dn'] = spin_npu.get(sid, {}).get('ret_dn', {})
@@ -806,10 +845,12 @@ def main():
         bid = r['box_id']
         d = make_basic(r, 'box_id')
         d['name'] = BOX_NAME_OVERRIDES.get(bid, bid)
-        d['vtuber']      = bid in VTUBER_BOX_NAMES
-        d['cat_xsuit']   = False
-        d['cat_gilt']    = False
+        d['vtuber']       = bid in VTUBER_BOX_NAMES
+        d['cat_anime']    = bid in ANIME_BOX_NAMES
+        d['cat_xsuit']    = False
+        d['cat_gilt']     = False
         d['cat_sportcar'] = bid.startswith('跑车宝箱')
+        d['cat_mummy']    = bid in MUMMY_BOX_NAMES
         d['level'] = box_level.get(bid, {})
         d['npu_dn'] = box_npu.get(bid, {}).get('npu_dn', {})
         d['ret_dn'] = box_npu.get(bid, {}).get('ret_dn', {})

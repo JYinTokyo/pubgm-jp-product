@@ -53,6 +53,8 @@ tr.sel-row:hover td{background:#e6eaff!important}
 tr.active-row.sel-row td{background:#e8f0fa!important}
 .cat-badge{display:inline-block;border-radius:3px;padding:1px 5px;font-size:10px;margin-left:4px;font-weight:600}
 .badge-vt{background:#f5e6ff;color:#9333ea}
+.badge-an{background:#d1fae5;color:#065f46}
+.badge-mm{background:#ffedd5;color:#9a3412}
 .badge-xs{background:#e0f2fe;color:#0369a1}
 .badge-gt{background:#fef9c3;color:#92400e}
 .badge-sc{background:#fee2e2;color:#b91c1c}
@@ -130,6 +132,8 @@ thead th.col-group-ret{border-left:3px solid #bcc4d8}
       </label>
       <div class="cat-sep"></div>
       <label onclick="toggleCat(event,'vtuber')"><input type="checkbox" id="catChk_vtuber" checked> VTuber</label>
+      <label onclick="toggleCat(event,'anime')"><input type="checkbox" id="catChk_anime" checked> <span data-i18n="cat_anime">애니</span></label>
+      <label onclick="toggleCat(event,'mummy')"><input type="checkbox" id="catChk_mummy" checked> MUMMY</label>
       <label onclick="toggleCat(event,'xsuit')"><input type="checkbox" id="catChk_xsuit" checked> X-suit</label>
       <label onclick="toggleCat(event,'gilt')"><input type="checkbox" id="catChk_gilt" checked> GILT</label>
       <label onclick="toggleCat(event,'sportcar')"><input type="checkbox" id="catChk_sportcar" checked> Sport Car</label>
@@ -225,6 +229,7 @@ const I18N = {
     normal:              '일반',
     category_btn:        '카테고리 ▼',
     cat_normal:          '일반',
+    cat_anime:           '애니',
     pay_level_label:     '과금 레벨 기준:',
     method_period:       '판매기간',
     method_3m:           '직전 3개월',
@@ -256,6 +261,7 @@ const I18N = {
     normal:              'Normal',
     category_btn:        'Category ▼',
     cat_normal:          'Normal',
+    cat_anime:           'Anime',
     pay_level_label:     'Pay Level:',
     method_period:       'Sale Period',
     method_3m:           'Prev 3M',
@@ -287,6 +293,7 @@ const I18N = {
     normal:              '通常',
     category_btn:        'カテゴリ ▼',
     cat_normal:          '通常',
+    cat_anime:           'アニメ',
     pay_level_label:     '課金レベル:',
     method_period:       '販売期間',
     method_3m:           '直前3ヶ月',
@@ -347,7 +354,7 @@ function heatBg(lv, val, maxVal){
 }
 function pct(a,b){ return b ? (a/b*100).toFixed(1)+'%' : '-'; }
 
-const ALL_CATS = ['vtuber','xsuit','gilt','sportcar','normal'];
+const ALL_CATS = ['vtuber','anime','mummy','xsuit','gilt','sportcar','normal'];
 const checkedCats = new Set(ALL_CATS);
 
 let curType    = 'all';
@@ -624,8 +631,10 @@ function getFiltered(){
 
   let filtered = data.filter(d => {
     if(checkedCats.size < ALL_CATS.length){
-      const isNormal = !d.vtuber && !d.cat_xsuit && !d.cat_gilt && !d.cat_sportcar;
+      const isNormal = !d.vtuber && !d.cat_anime && !d.cat_mummy && !d.cat_xsuit && !d.cat_gilt && !d.cat_sportcar;
       const ok = (checkedCats.has('vtuber')   && d.vtuber)
+              || (checkedCats.has('anime')    && d.cat_anime)
+              || (checkedCats.has('mummy')    && d.cat_mummy)
               || (checkedCats.has('xsuit')    && d.cat_xsuit)
               || (checkedCats.has('gilt')     && d.cat_gilt)
               || (checkedCats.has('sportcar') && d.cat_sportcar)
@@ -706,6 +715,8 @@ function render(){
     const typeCell = `<td class="left"><span style="background:${isSpin?'#dbeafe':'#f3e8ff'};color:${isSpin?'#1d4ed8':'#7e22ce'};border-radius:3px;padding:2px 7px;font-size:11px;font-weight:500">${isSpin?'Spin':'Crate'}</span></td>`;
     const badges = [
       d.vtuber       ? '<span class="cat-badge badge-vt">VT</span>' : '',
+      d.cat_anime    ? '<span class="cat-badge badge-an">AN</span>' : '',
+      d.cat_mummy    ? '<span class="cat-badge badge-mm">MM</span>' : '',
       d.cat_xsuit    ? '<span class="cat-badge badge-xs">XS</span>' : '',
       d.cat_gilt     ? '<span class="cat-badge badge-gt">GT</span>' : '',
       d.cat_sportcar ? '<span class="cat-badge badge-sc">SC</span>' : '',
