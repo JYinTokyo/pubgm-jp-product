@@ -36,7 +36,7 @@ echo "$(date): Generating dashboard..."
 python3 generate.py
 
 echo "$(date): Deploying to Cloudflare..."
-npx wrangler deploy
+npx wrangler deploy --config /Users/kim_yeong/my-project/pubgm-jp-product/wrangler.toml
 echo "$(date): Done."
 
 touch "$SUCCESS_FLAG"
