@@ -271,9 +271,9 @@ WITH spin_meta AS (
   QUALIFY ROW_NUMBER() OVER (PARTITION BY spin_contents ORDER BY std_dt DESC) = 1
 ),
 jp_users AS (
-  SELECT DISTINCT CAST(vopenid AS STRING) AS vopenid
-  FROM pubgm_mart.purchasing_power_user
-  WHERE country = 'JP' AND std_dt = DATE('{cutoff}')
+  SELECT DISTINCT CAST(p.vopenid AS STRING) AS vopenid
+  FROM pubgm_mart.purchasing_power_user p
+  WHERE p.country = 'JP' AND {lv_date_filter}
 ),
 spin_txns AS (
   SELECT sm.spin_id, CAST(s.vopenid AS STRING) AS vopenid,
@@ -300,7 +300,8 @@ buyers AS (
 ),
 lv_snap AS (
   SELECT CAST(p.vopenid AS STRING) AS vopenid, p.std_dt,
-    COALESCE(p.pay_amt_duringLast30days_tag, 'Non-Paid') AS lv
+    CASE WHEN COALESCE(p.pay_amt_duringLast30days_tag, 'Lv_0') IN ('Lv_0', 'Non-Paid') THEN 'Non-Paid'
+         ELSE p.pay_amt_duringLast30days_tag END AS lv
   FROM pubgm_mart.purchasing_power_user p
   LEFT SEMI JOIN buyers b ON CAST(p.vopenid AS STRING) = b.vopenid
   WHERE p.country = 'JP'
@@ -386,9 +387,9 @@ WITH box_meta AS (
   ) = 1
 ),
 jp_users AS (
-  SELECT DISTINCT CAST(vopenid AS STRING) AS vopenid
-  FROM pubgm_mart.purchasing_power_user
-  WHERE country = 'JP' AND std_dt = DATE('{cutoff}')
+  SELECT DISTINCT CAST(p.vopenid AS STRING) AS vopenid
+  FROM pubgm_mart.purchasing_power_user p
+  WHERE p.country = 'JP' AND {lv_date_filter}
 ),
 box_txns AS (
   SELECT bm.box_id, CAST(u.vopenid AS STRING) AS vopenid,
@@ -416,7 +417,8 @@ buyers AS (
 ),
 lv_snap AS (
   SELECT CAST(p.vopenid AS STRING) AS vopenid, p.std_dt,
-    COALESCE(p.pay_amt_duringLast30days_tag, 'Non-Paid') AS lv
+    CASE WHEN COALESCE(p.pay_amt_duringLast30days_tag, 'Lv_0') IN ('Lv_0', 'Non-Paid') THEN 'Non-Paid'
+         ELSE p.pay_amt_duringLast30days_tag END AS lv
   FROM pubgm_mart.purchasing_power_user p
   LEFT SEMI JOIN buyers b ON CAST(p.vopenid AS STRING) = b.vopenid
   WHERE p.country = 'JP'
